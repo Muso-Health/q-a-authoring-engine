@@ -7,6 +7,8 @@ name = "qa-authoring-engine"
 dynamic = ["version"]
 description = "Q&A authoring engine for Muso"
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     # Pinned: these three SHAPE the OpenAPI document — kept identical to budgetisation-engine so
     # both backends emit the contract the same way. Bump deliberately, in both repos.
