@@ -10,10 +10,22 @@ from starlette.exceptions import HTTPException
 
 from qa_authoring.application.language_errors import (
     LanguageCodeAlreadyExistsError,
+    LanguageInUseError,
     LanguageNotFoundError,
 )
+from qa_authoring.application.project_errors import (
+    ProjectHasProtocolsError,
+    ProjectNotFoundError,
+    UnknownBaseLanguageError,
+)
+from qa_authoring.application.protocol_errors import (
+    ProtocolHasThemesError,
+    ProtocolNotFoundError,
+)
+from qa_authoring.application.theme_errors import ThemeNotFoundError
 from qa_authoring.domain.model.language import InvalidLanguageNameError
 from qa_authoring.domain.value_objects.language_code import InvalidLanguageCodeError
+from qa_authoring.domain.value_objects.naming import InvalidNameError
 
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request
@@ -29,9 +41,17 @@ class _Rule:
 # machine code. An unmapped error is a 500.
 _RULES: dict[type[Exception], _Rule] = {
     LanguageNotFoundError: _Rule(404, "language_not_found"),
+    ProjectNotFoundError: _Rule(404, "project_not_found"),
+    ProtocolNotFoundError: _Rule(404, "protocol_not_found"),
+    ThemeNotFoundError: _Rule(404, "theme_not_found"),
     LanguageCodeAlreadyExistsError: _Rule(409, "language_code_already_exists"),
+    LanguageInUseError: _Rule(409, "language_in_use"),
+    ProjectHasProtocolsError: _Rule(409, "project_has_protocols"),
+    ProtocolHasThemesError: _Rule(409, "protocol_has_themes"),
     InvalidLanguageCodeError: _Rule(422, "invalid_language_code"),
     InvalidLanguageNameError: _Rule(422, "invalid_language_name"),
+    InvalidNameError: _Rule(422, "invalid_name"),
+    UnknownBaseLanguageError: _Rule(422, "unknown_base_language"),
 }
 
 _VALIDATION_CODE = "invalid_request"

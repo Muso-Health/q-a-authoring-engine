@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from apps.api.errors import register_error_handlers
 from apps.api.routers.health import router as health_router
 from apps.api.routers.languages import router as languages_router
+from apps.api.routers.projects import router as projects_router
+from apps.api.routers.protocols import router as protocols_router
+from apps.api.routers.themes import router as themes_router
 from apps.api.version import API_VERSION
 
 if TYPE_CHECKING:
@@ -44,6 +47,12 @@ def create_app(
             allow_credentials=False,
         )
     register_error_handlers(app)
-    app.include_router(health_router)
-    app.include_router(languages_router)
+    for router in (
+        health_router,
+        languages_router,
+        projects_router,
+        protocols_router,
+        themes_router,
+    ):
+        app.include_router(router)
     return app

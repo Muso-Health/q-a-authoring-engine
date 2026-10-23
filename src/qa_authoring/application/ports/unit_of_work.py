@@ -6,6 +6,9 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from qa_authoring.application.ports.language_repository import LanguageRepository
+    from qa_authoring.application.ports.project_repository import ProjectRepository
+    from qa_authoring.application.ports.protocol_repository import ProtocolRepository
+    from qa_authoring.application.ports.theme_repository import ThemeRepository
 
 
 class UnitOfWork(Protocol):
@@ -13,6 +16,9 @@ class UnitOfWork(Protocol):
     back together on an exception."""
 
     languages: LanguageRepository
+    projects: ProjectRepository
+    protocols: ProtocolRepository
+    themes: ThemeRepository
 
     async def __aenter__(self) -> Self: ...
 

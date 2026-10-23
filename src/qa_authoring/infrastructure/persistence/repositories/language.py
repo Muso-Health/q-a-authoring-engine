@@ -5,17 +5,23 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
-from qa_authoring.application.language_errors import LanguageCodeAlreadyExistsError
+from qa_authoring.application.language_errors import (
+    LanguageCodeAlreadyExistsError,
+    LanguageInUseError,
+)
 from qa_authoring.domain.model.language import Language
 from qa_authoring.domain.value_objects.language_code import LanguageCode
+from qa_authoring.infrastructure.persistence.repositories._integrity import (
+    FOREIGN_KEY_VIOLATION,
+    UNIQUE_VIOLATION,
+    sqlstate,
+)
 from qa_authoring.infrastructure.persistence.schema.language import languages
 
 if TYPE_CHECKING:
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncConnection
-
-_UNIQUE_VIOLATION = "23505"
 
 
 def _to_domain(row: Any) -> Language:
@@ -34,7 +40,7 @@ class PostgresLanguageRepository:
                 )
             )
         except IntegrityError as exc:
-            if getattr(exc.orig, "sqlstate", None) == _UNIQUE_VIOLATION:
+            if sqlstate(exc) == UNIQUE_VIOLATION:
                 raise LanguageCodeAlreadyExistsError(language.code.value) from exc
             raise
 
@@ -60,4 +66,9 @@ class PostgresLanguageRepository:
         )
 
     async def delete(self, language_id: UUID) -> None:
-        await self._connection.execute(delete(languages).where(languages.c.id == language_id))
+        try:
+            await self._connection.execute(delete(languages).where(languages.c.id == language_id))
+        except IntegrityError as exc:
+            if sqlstate(exc) == FOREIGN_KEY_VIOLATION:
+                raise LanguageInUseError(language_id) from exc
+            raise

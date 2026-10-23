@@ -73,5 +73,5 @@ async def migrated_engine(migrated_url: str) -> AsyncIterator[AsyncEngine]:
     factory = LocalDsnEngineFactory(database_url=migrated_url, schema=REPO_SCHEMA)
     async with factory.engine() as engine:
         async with engine.begin() as connection:
-            await connection.execute(text("TRUNCATE languages"))
+            await connection.execute(text("TRUNCATE themes, protocols, projects, languages"))
         yield engine

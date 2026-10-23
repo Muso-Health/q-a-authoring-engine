@@ -5,6 +5,11 @@ from typing import TYPE_CHECKING, Self
 from qa_authoring.infrastructure.persistence.repositories.language import (
     PostgresLanguageRepository,
 )
+from qa_authoring.infrastructure.persistence.repositories.project import PostgresProjectRepository
+from qa_authoring.infrastructure.persistence.repositories.protocol import (
+    PostgresProtocolRepository,
+)
+from qa_authoring.infrastructure.persistence.repositories.theme import PostgresThemeRepository
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -12,6 +17,9 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 
     from qa_authoring.application.ports.language_repository import LanguageRepository
+    from qa_authoring.application.ports.project_repository import ProjectRepository
+    from qa_authoring.application.ports.protocol_repository import ProtocolRepository
+    from qa_authoring.application.ports.theme_repository import ThemeRepository
 
 
 class SqlAlchemyUnitOfWork:
@@ -19,6 +27,9 @@ class SqlAlchemyUnitOfWork:
     Commits on a clean exit, rolls back on an exception."""
 
     languages: LanguageRepository
+    projects: ProjectRepository
+    protocols: ProtocolRepository
+    themes: ThemeRepository
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -29,6 +40,9 @@ class SqlAlchemyUnitOfWork:
         self._connection = await self._engine.connect()
         self._transaction = await self._connection.begin()
         self.languages = PostgresLanguageRepository(self._connection)
+        self.projects = PostgresProjectRepository(self._connection)
+        self.protocols = PostgresProtocolRepository(self._connection)
+        self.themes = PostgresThemeRepository(self._connection)
         return self
 
     async def __aexit__(

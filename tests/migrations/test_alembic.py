@@ -48,7 +48,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0002_languages",)]
+    assert versions == [("0003_catalog",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -68,14 +68,54 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     )
     assert languages == [("pk_languages", "PRIMARY KEY"), ("uq_languages_code", "UNIQUE")]
 
+    foreign_keys = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT tc.constraint_name, tc.table_name, ccu.table_name, rc.delete_rule "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.referential_constraints rc "
+            "ON rc.constraint_name = tc.constraint_name AND rc.constraint_schema = tc.table_schema "
+            "JOIN information_schema.constraint_column_usage ccu "
+            "ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema "
+            f"WHERE tc.table_schema = '{SCHEMA}' AND tc.constraint_type = 'FOREIGN KEY' "
+            "ORDER BY tc.constraint_name",
+        )
+    )
+    assert foreign_keys == [
+        ("fk_projects_base_language_id_languages", "projects", "languages", "RESTRICT"),
+        ("fk_protocols_project_id_projects", "protocols", "projects", "RESTRICT"),
+        ("fk_themes_protocol_id_protocols", "themes", "protocols", "RESTRICT"),
+    ]
+    indexes = asyncio.run(
+        _query(
+            postgres_url,
+            f"SELECT indexname FROM pg_indexes WHERE schemaname = '{SCHEMA}' "
+            "AND indexname LIKE 'ix_%' ORDER BY indexname",
+        )
+    )
+    assert indexes == [
+        ("ix_projects_base_language_id",),
+        ("ix_protocols_project_id",),
+        ("ix_themes_protocol_id",),
+    ]
+
     # Idempotent: a second upgrade is a no-op, and every revision downgrades cleanly.
     command.upgrade(_alembic_config(), "head")
+    command.downgrade(_alembic_config(), "0002_languages")
+    remaining = asyncio.run(
+        _query(
+            postgres_url,
+            f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{SCHEMA}' "
+            "AND table_name <> 'alembic_version' ORDER BY table_name",
+        )
+    )
+    assert remaining == [("languages",)]
     command.downgrade(_alembic_config(), "base")
     tables = asyncio.run(
         _query(
             postgres_url,
             f"SELECT 1 FROM information_schema.tables WHERE table_schema = '{SCHEMA}' "
-            "AND table_name = 'languages'",
+            "AND table_name <> 'alembic_version'",
         )
     )
     assert tables == []
