@@ -1,0 +1,89 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qa-authoring-engine"
+dynamic = ["version"]
+description = "Q&A authoring engine for Muso"
+requires-python = ">=3.12"
+dependencies = [
+    # Pinned: these three SHAPE the OpenAPI document — kept identical to budgetisation-engine so
+    # both backends emit the contract the same way. Bump deliberately, in both repos.
+    "fastapi==0.139.2",
+    "uvicorn[standard]",
+    "pydantic==2.13.4",
+    "starlette==1.3.1",
+    "pydantic-settings",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "cloud-sql-python-connector[asyncpg]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "testcontainers[postgres]",
+    "httpx",
+    # Pinned: an unpinned mypy floats in CI, diverging from local. Pin so CI and local type-check
+    # identically (same version as budgetisation-engine).
+    "mypy==2.3.1",
+    "ruff",
+]
+
+# The package version is derived from the API contract version — one source of truth.
+[tool.hatch.version]
+path = "src/apps/api/version.py"
+pattern = 'API_VERSION = "(?P<version>[^"]+)"'
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qa_authoring", "src/config", "src/apps"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires a running PostgreSQL (Docker for testcontainers, or QA_AUTHORING_TEST_DATABASE_URL)",
+]
+addopts = "-q --strict-markers"
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+# Alembic migrations are generated scripts, not application code — CI type-checks `mypy src`, which
+# never includes them. Exclude them so a whole-repo `mypy .` agrees with CI.
+exclude = ["^migrations/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "testcontainers.*",
+    "google.cloud.sql.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TCH", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["qa_authoring", "config", "apps"]
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic evaluates model annotations at runtime (via get_type_hints), so imports used only in a
+# BaseModel field are genuinely runtime imports, not type-checking-only ones.
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
