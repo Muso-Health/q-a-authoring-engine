@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from qa_authoring.application.qaset_response import (
+        AttachedIntentResult,
         LanguagePresenceResult,
         QASetResult,
         QASetSummaryResult,
@@ -83,6 +84,19 @@ class TranslationResponse(BaseModel):
         )
 
 
+class AttachedIntentResponse(BaseModel):
+    intent_id: UUID
+    text: str
+
+    @classmethod
+    def of(cls, result: AttachedIntentResult) -> AttachedIntentResponse:
+        return cls(intent_id=result.intent_id, text=result.text)
+
+
+class AttachIntentRequest(_Strict):
+    intent_id: UUID
+
+
 class AnswerResponse(BaseModel):
     id: UUID
     text: str
@@ -94,6 +108,7 @@ class QuestionVariantResponse(BaseModel):
     language_id: UUID
     text: str
     links: list[TranslationResponse]
+    intents: list[AttachedIntentResponse]
 
     @classmethod
     def of(cls, result: QuestionVariantResult) -> QuestionVariantResponse:
@@ -102,6 +117,7 @@ class QuestionVariantResponse(BaseModel):
             language_id=result.language_id,
             text=result.text,
             links=[TranslationResponse.of(link) for link in result.links],
+            intents=[AttachedIntentResponse.of(intent) for intent in result.intents],
         )
 
 

@@ -5,16 +5,19 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Self
 
 from config.container import Container
+from qa_authoring.domain.model.intent import normalize_intent_text
 
 if TYPE_CHECKING:
     from types import TracebackType
     from uuid import UUID
 
+    from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
+    from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
     from qa_authoring.domain.model.protocol import Protocol
@@ -148,6 +151,35 @@ class InMemoryQASetRepository:
             p.language_id == language_id for row in self.rows.values() for p in row.presences()
         )
 
+    async def uses_intent(self, intent_id: UUID) -> bool:
+        return any(row.uses_intent(intent_id) for row in self.rows.values())
+
+
+class InMemoryIntentRepository:
+    def __init__(self) -> None:
+        self.rows: dict[UUID, Intent] = {}
+
+    async def get_or_create(self, intent: Intent) -> tuple[Intent, bool]:
+        existing = next((row for row in self.rows.values() if row.key == intent.key), None)
+        if existing is not None:
+            return existing, False
+        self.rows[intent.id] = intent
+        return intent, True
+
+    async def get(self, intent_id: UUID) -> Intent | None:
+        return self.rows.get(intent_id)
+
+    async def get_many(self, intent_ids: set[UUID]) -> dict[UUID, Intent]:
+        return {i: self.rows[i] for i in intent_ids if i in self.rows}
+
+    async def list(self, prefix: str | None = None) -> tuple[Intent, ...]:
+        key = normalize_intent_text(prefix or "")
+        rows = [row for row in self.rows.values() if row.key.startswith(key)]
+        return tuple(sorted(rows, key=lambda row: (row.key, str(row.id))))
+
+    async def delete(self, intent_id: UUID) -> None:
+        self.rows.pop(intent_id, None)
+
 
 @dataclass
 class InMemoryStore:
@@ -156,6 +188,7 @@ class InMemoryStore:
     protocols: InMemoryProtocolRepository = field(default_factory=InMemoryProtocolRepository)
     themes: InMemoryThemeRepository = field(default_factory=InMemoryThemeRepository)
     qasets: InMemoryQASetRepository = field(default_factory=InMemoryQASetRepository)
+    intents: InMemoryIntentRepository = field(default_factory=InMemoryIntentRepository)
 
 
 class InMemoryUnitOfWork:
@@ -164,6 +197,7 @@ class InMemoryUnitOfWork:
     protocols: ProtocolRepository
     themes: ThemeRepository
     qasets: QASetRepository
+    intents: IntentRepository
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -171,6 +205,7 @@ class InMemoryUnitOfWork:
         self.protocols = store.protocols
         self.themes = store.themes
         self.qasets = store.qasets
+        self.intents = store.intents
 
     async def __aenter__(self) -> Self:
         return self

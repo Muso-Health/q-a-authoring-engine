@@ -68,6 +68,13 @@ class TranslationLinkNotFoundError(Exception):
         self.link_id = link_id
 
 
+class IntentNotAttachedError(Exception):
+    def __init__(self, variant_id: UUID, intent_id: UUID) -> None:
+        super().__init__(f"intent {intent_id} is not attached to question variant {variant_id}")
+        self.variant_id = variant_id
+        self.intent_id = intent_id
+
+
 class _Text:
     __slots__ = ("_id", "_language_id", "_text")
     subject = "text"
@@ -101,10 +108,32 @@ class Answer(_Text):
 
 
 class QuestionVariant(_Text):
-    """One phrasing of the question in one language. Mutated only through its ``QASet``."""
+    """One phrasing of the question in one language, tagged with catalogue intents (by id, in
+    attachment order). Mutated only through its ``QASet``."""
 
-    __slots__ = ()
+    __slots__ = ("_intent_ids",)
     subject = "question variant"
+
+    def __init__(
+        self, variant_id: UUID, language_id: UUID, text: str, intent_ids: Iterable[UUID] = ()
+    ) -> None:
+        super().__init__(variant_id, language_id, text)
+        self._intent_ids: dict[UUID, None] = dict.fromkeys(intent_ids)
+
+    @property
+    def intent_ids(self) -> tuple[UUID, ...]:
+        return tuple(self._intent_ids)
+
+    def _attach(self, intent_id: UUID) -> bool:
+        if intent_id in self._intent_ids:
+            return False
+        self._intent_ids[intent_id] = None
+        return True
+
+    def _detach(self, intent_id: UUID) -> None:
+        if intent_id not in self._intent_ids:
+            raise IntentNotAttachedError(self.id, intent_id)
+        del self._intent_ids[intent_id]
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,6 +343,16 @@ class QASet:
 
     def unlink_variants(self, link_id: UUID) -> None:
         self._variant_links.remove(link_id)
+
+    def attach_intent(self, variant_id: UUID, intent_id: UUID) -> bool:
+        """Tag a variant with a catalogue intent; False if it already was (idempotent)."""
+        return self._variant(variant_id)._attach(intent_id)
+
+    def detach_intent(self, variant_id: UUID, intent_id: UUID) -> None:
+        self._variant(variant_id)._detach(intent_id)
+
+    def uses_intent(self, intent_id: UUID) -> bool:
+        return any(intent_id in v.intent_ids for v in self._variants.values())
 
     def answer_translations(self, answer_id: UUID) -> tuple[Translation, ...]:
         return tuple(

@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.errors import register_error_handlers
 from apps.api.routers.health import router as health_router
+from apps.api.routers.intents import router as intents_router
 from apps.api.routers.languages import router as languages_router
 from apps.api.routers.projects import router as projects_router
 from apps.api.routers.protocols import router as protocols_router
@@ -55,6 +56,7 @@ def create_app(
         protocols_router,
         themes_router,
         qasets_router,
+        intents_router,
     ):
         app.include_router(router)
     return app

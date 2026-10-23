@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Table, delete, exists, insert, select, update
+from sqlalchemy import Table, delete, exists, insert, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 
 from qa_authoring.application.qaset_errors import UnknownLanguageError
@@ -19,6 +19,7 @@ from qa_authoring.infrastructure.persistence.schema.qaset import (
     answers,
     qasets,
     question_variants,
+    variant_intents,
     variant_translation_links,
 )
 
@@ -72,6 +73,7 @@ class PostgresQASetRepository:
             raise
         await self._insert(answers, qaset.id, qaset.answers)
         await self._insert(question_variants, qaset.id, qaset.variants)
+        await self._save_intents(qaset)
         await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
         await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
@@ -107,8 +109,9 @@ class PostgresQASetRepository:
         )
         await self._update_changed(answers, stored_answers, qaset.answers)
         await self._update_changed(question_variants, stored_variants, qaset.variants)
-        # Links last: they reference answers/variants inserted above. Links of removed items
-        # are already gone (ON DELETE CASCADE).
+        # Links and attachments last: they reference answers/variants inserted above. Those of
+        # removed items are already gone (ON DELETE CASCADE).
+        await self._save_intents(qaset)
         await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
         await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
@@ -123,6 +126,37 @@ class PostgresQASetRepository:
         # Every variant's language has an answer (composite FK), so answers are enough.
         query = select(exists().where(answers.c.language_id == language_id))
         return bool(await self._connection.scalar(query))
+
+    async def uses_intent(self, intent_id: UUID) -> bool:
+        query = select(exists().where(variant_intents.c.intent_id == intent_id))
+        return bool(await self._connection.scalar(query))
+
+    async def _save_intents(self, qaset: QASet) -> None:
+        stored = {
+            (row.variant_id, row.intent_id)
+            for row in await self._connection.execute(
+                select(variant_intents.c.variant_id, variant_intents.c.intent_id)
+                .join(question_variants, question_variants.c.id == variant_intents.c.variant_id)
+                .where(question_variants.c.qaset_id == qaset.id)
+            )
+        }
+        current = {(v.id, i) for v in qaset.variants for i in v.intent_ids}
+        missing = stored - current
+        if missing:
+            await self._connection.execute(
+                delete(variant_intents).where(
+                    tuple_(variant_intents.c.variant_id, variant_intents.c.intent_id).in_(missing)
+                )
+            )
+        # In each variant's attachment order, so created_at follows it.
+        new = [
+            {"variant_id": v.id, "intent_id": i}
+            for v in qaset.variants
+            for i in v.intent_ids
+            if (v.id, i) not in stored
+        ]
+        if new:
+            await self._connection.execute(insert(variant_intents), new)
 
     async def _stored_texts(self, table: Table, qaset_id: UUID) -> dict[UUID, str]:
         rows = await self._connection.execute(
@@ -203,13 +237,23 @@ class PostgresQASetRepository:
             .order_by(answers.c.created_at, answers.c.id)
         ):
             answers_by_qaset[a.qaset_id].append(Answer(a.id, a.language_id, a.text))
+        intents_by_variant: defaultdict[UUID, list[UUID]] = defaultdict(list)
+        for row in await self._connection.execute(
+            select(variant_intents.c.variant_id, variant_intents.c.intent_id)
+            .join(question_variants, question_variants.c.id == variant_intents.c.variant_id)
+            .where(question_variants.c.qaset_id.in_(ids))
+            .order_by(variant_intents.c.created_at, variant_intents.c.intent_id)
+        ):
+            intents_by_variant[row.variant_id].append(row.intent_id)
         variants_by_qaset: defaultdict[UUID, list[QuestionVariant]] = defaultdict(list)
         for v in await self._connection.execute(
             select(question_variants)
             .where(question_variants.c.qaset_id.in_(ids))
             .order_by(question_variants.c.created_at, question_variants.c.id)
         ):
-            variants_by_qaset[v.qaset_id].append(QuestionVariant(v.id, v.language_id, v.text))
+            variants_by_qaset[v.qaset_id].append(
+                QuestionVariant(v.id, v.language_id, v.text, intents_by_variant[v.id])
+            )
         answer_links = await self._load_links(_ANSWER_LINKS, ids)
         variant_links = await self._load_links(_VARIANT_LINKS, ids)
         return tuple(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
+from qa_authoring.infrastructure.persistence.repositories.intent import PostgresIntentRepository
 from qa_authoring.infrastructure.persistence.repositories.language import (
     PostgresLanguageRepository,
 )
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 
+    from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
@@ -33,6 +35,7 @@ class SqlAlchemyUnitOfWork:
     protocols: ProtocolRepository
     themes: ThemeRepository
     qasets: QASetRepository
+    intents: IntentRepository
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -47,6 +50,7 @@ class SqlAlchemyUnitOfWork:
         self.protocols = PostgresProtocolRepository(self._connection)
         self.themes = PostgresThemeRepository(self._connection)
         self.qasets = PostgresQASetRepository(self._connection)
+        self.intents = PostgresIntentRepository(self._connection)
         return self
 
     async def __aexit__(

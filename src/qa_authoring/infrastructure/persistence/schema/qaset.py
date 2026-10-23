@@ -103,3 +103,20 @@ answer_translation_links = _translation_links("answer_translation_links", "answe
 variant_translation_links = _translation_links(
     "variant_translation_links", "variant", "question_variants"
 )
+
+variant_intents = Table(
+    "variant_intents",
+    metadata,
+    Column(
+        "variant_id",
+        Uuid,
+        ForeignKey("question_variants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "intent_id", Uuid, ForeignKey("intents.id", ondelete="RESTRICT"), nullable=False, index=True
+    ),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+    PrimaryKeyConstraint("variant_id", "intent_id"),
+)

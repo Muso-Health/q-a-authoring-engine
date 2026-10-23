@@ -255,7 +255,13 @@ def test_variant_lifecycle(client: TestClient, setup: tuple[str, str, str]) -> N
     created = _ok(
         client.post(f"/qasets/{qaset_id}/languages/{fr}/variants", json={"text": " What? "})
     )
-    assert created == {"id": created["id"], "language_id": fr, "text": "What?", "links": []}
+    assert created == {
+        "id": created["id"],
+        "language_id": fr,
+        "text": "What?",
+        "links": [],
+        "intents": [],
+    }
     url = f"/qasets/{qaset_id}/variants/{created['id']}"
 
     patched = _ok(client.patch(url, json={"text": "What now?"}), 200)

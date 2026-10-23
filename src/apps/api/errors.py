@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from qa_authoring.application.intent_errors import IntentInUseError, IntentNotFoundError
 from qa_authoring.application.language_errors import (
     LanguageCodeAlreadyExistsError,
     LanguageInUseError,
@@ -27,6 +28,7 @@ from qa_authoring.application.theme_errors import ThemeHasQASetsError, ThemeNotF
 from qa_authoring.domain.model.language import InvalidLanguageNameError
 from qa_authoring.domain.model.qaset import (
     AnswerNotFoundError,
+    IntentNotAttachedError,
     LanguageAlreadyPresentError,
     LanguageNotPresentError,
     LanguagePresenceRequiredError,
@@ -61,6 +63,8 @@ _RULES: dict[type[Exception], _Rule] = {
     QuestionVariantNotFoundError: _Rule(404, "variant_not_found"),
     AnswerNotFoundError: _Rule(404, "answer_not_found"),
     TranslationLinkNotFoundError: _Rule(404, "link_not_found"),
+    IntentNotFoundError: _Rule(404, "intent_not_found"),
+    IntentNotAttachedError: _Rule(404, "intent_not_attached"),
     LanguageCodeAlreadyExistsError: _Rule(409, "language_code_already_exists"),
     LanguageInUseError: _Rule(409, "language_in_use"),
     ProjectHasProtocolsError: _Rule(409, "project_has_protocols"),
@@ -69,6 +73,7 @@ _RULES: dict[type[Exception], _Rule] = {
     LanguageAlreadyPresentError: _Rule(409, "language_already_present"),
     LanguagePresenceRequiredError: _Rule(409, "language_presence_required"),
     LinkAlreadyExistsError: _Rule(409, "link_already_exists"),
+    IntentInUseError: _Rule(409, "intent_in_use"),
     InvalidLanguageCodeError: _Rule(422, "invalid_language_code"),
     InvalidLanguageNameError: _Rule(422, "invalid_language_name"),
     InvalidNameError: _Rule(422, "invalid_name"),

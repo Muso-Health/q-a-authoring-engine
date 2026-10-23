@@ -48,7 +48,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0006_translation_links",)]
+    assert versions == [("0007_intents",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -114,6 +114,13 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("fk_question_variants_qaset_id_answers", "question_variants", "answers", "CASCADE"),
         ("fk_question_variants_qaset_id_qasets", "question_variants", "qasets", "CASCADE"),
         ("fk_themes_protocol_id_protocols", "themes", "protocols", "RESTRICT"),
+        ("fk_variant_intents_intent_id_intents", "variant_intents", "intents", "RESTRICT"),
+        (
+            "fk_variant_intents_variant_id_question_variants",
+            "variant_intents",
+            "question_variants",
+            "CASCADE",
+        ),
         (
             "fk_variant_translation_links_qaset_id_qasets",
             "variant_translation_links",
@@ -148,6 +155,19 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("uq_answer_translation_links_pair", "UNIQUE"),
         ("uq_variant_translation_links_pair", "UNIQUE"),
     ]
+    intent_constraints = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' AND table_name IN ('intents', 'variant_intents') "
+            "AND constraint_type IN ('PRIMARY KEY', 'UNIQUE') ORDER BY constraint_name",
+        )
+    )
+    assert intent_constraints == [
+        ("pk_intents", "PRIMARY KEY"),
+        ("pk_variant_intents", "PRIMARY KEY"),
+        ("uq_intents_key", "UNIQUE"),
+    ]
     unique = asyncio.run(
         _query(
             postgres_url,
@@ -174,6 +194,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_question_variants_language_id",),
         ("ix_question_variants_qaset_id_language_id",),
         ("ix_themes_protocol_id",),
+        ("ix_variant_intents_intent_id",),
+        ("ix_variant_intents_variant_id",),
         ("ix_variant_translation_links_variant_high_id",),
         ("ix_variant_translation_links_variant_low_id",),
     ]
@@ -192,6 +214,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             "answer_translation_links",
             "answers",
             "question_variants",
+            "variant_intents",
             "variant_translation_links",
         )
     ]
@@ -202,7 +225,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
                 postgres_url,
                 "SELECT 1 FROM information_schema.columns "
                 f"WHERE table_schema = '{SCHEMA}' AND (column_name = 'created_at' "
-                "OR table_name LIKE '%translation_links')",
+                "OR table_name LIKE '%translation_links' OR table_name LIKE '%intents')",
             )
         )
         == []

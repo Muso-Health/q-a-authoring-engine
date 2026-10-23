@@ -27,4 +27,4 @@ class AddLanguagePresenceHandler:
             raise UnknownLanguageError(command.language_id)
         qaset.add_language(command.language_id, command.answer_text)
         await self._qasets.save(qaset)
-        return LanguagePresenceResult.of(qaset, qaset.presence(command.language_id))
+        return LanguagePresenceResult.of(qaset, qaset.presence(command.language_id), {})

@@ -9,6 +9,7 @@ from apps.api.dependencies import get_container
 from apps.api.schemas.qasets import (
     AnswerInLanguageRequest,
     AnswerLinkResponse,
+    AttachIntentRequest,
     LanguagePresenceResponse,
     LinkAnswersRequest,
     LinkVariantsRequest,
@@ -21,11 +22,13 @@ from apps.api.schemas.qasets import (
 from config.container import Container
 from qa_authoring.application.add_language_presence.command import AddLanguagePresenceCommand
 from qa_authoring.application.add_question_variant.command import AddQuestionVariantCommand
+from qa_authoring.application.attach_intent.command import AttachIntentCommand
 from qa_authoring.application.create_qaset.command import CreateQASetCommand
 from qa_authoring.application.delete_qaset.command import DeleteQASetCommand
 from qa_authoring.application.delete_question_variant.command import (
     DeleteQuestionVariantCommand,
 )
+from qa_authoring.application.detach_intent.command import DetachIntentCommand
 from qa_authoring.application.get_qaset.command import GetQASetQuery
 from qa_authoring.application.link_answers.command import LinkAnswersCommand
 from qa_authoring.application.link_variants.command import LinkVariantsCommand
@@ -172,4 +175,38 @@ async def link_variants(
 @router.delete("/qasets/{qaset_id}/variant-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def unlink_variants(qaset_id: UUID, link_id: UUID, container: ContainerDep) -> Response:
     await container.run(container.build_unlink_variants, UnlinkVariantsCommand(qaset_id, link_id))
+    return _no_content()
+
+
+@router.post(
+    "/qasets/{qaset_id}/variants/{variant_id}/intents", status_code=status.HTTP_201_CREATED
+)
+async def attach_intent(
+    qaset_id: UUID,
+    variant_id: UUID,
+    body: AttachIntentRequest,
+    response: Response,
+    container: ContainerDep,
+) -> QuestionVariantResponse:
+    """Tag the variant with a catalogue intent. Idempotent: 201 when attached, 200 when it
+    already was. Not propagated to translations."""
+    command = AttachIntentCommand(
+        qaset_id=qaset_id, variant_id=variant_id, intent_id=body.intent_id
+    )
+    result, created = await container.run(container.build_attach_intent, command)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return QuestionVariantResponse.of(result)
+
+
+@router.delete(
+    "/qasets/{qaset_id}/variants/{variant_id}/intents/{intent_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def detach_intent(
+    qaset_id: UUID, variant_id: UUID, intent_id: UUID, container: ContainerDep
+) -> Response:
+    """404 ``intent_not_attached`` if the variant does not carry the intent."""
+    command = DetachIntentCommand(qaset_id=qaset_id, variant_id=variant_id, intent_id=intent_id)
+    await container.run(container.build_detach_intent, command)
     return _no_content()

@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID  # noqa: TC003 — a field type on frozen result dataclasses
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from qa_authoring.domain.model.qaset import (
         LanguagePresence,
         QASet,
@@ -36,6 +38,12 @@ class TranslationLinkResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AttachedIntentResult:
+    intent_id: UUID
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class AnswerResult:
     id: UUID
     text: str
@@ -48,11 +56,16 @@ class QuestionVariantResult:
     language_id: UUID
     text: str
     links: tuple[TranslationResult, ...]
+    intents: tuple[AttachedIntentResult, ...]
 
     @classmethod
-    def of(cls, qaset: QASet, variant: QuestionVariant) -> QuestionVariantResult:
+    def of(
+        cls, qaset: QASet, variant: QuestionVariant, intent_texts: Mapping[UUID, str]
+    ) -> QuestionVariantResult:
+        """``intent_texts`` maps the variant's intent ids to their catalogue text."""
         links = tuple(TranslationResult.of(t) for t in qaset.variant_translations(variant.id))
-        return cls(variant.id, variant.language_id, variant.text, links)
+        intents = tuple(AttachedIntentResult(i, intent_texts[i]) for i in variant.intent_ids)
+        return cls(variant.id, variant.language_id, variant.text, links, intents)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,13 +76,15 @@ class LanguagePresenceResult:
     variant_count: int
 
     @classmethod
-    def of(cls, qaset: QASet, presence: LanguagePresence) -> LanguagePresenceResult:
+    def of(
+        cls, qaset: QASet, presence: LanguagePresence, intent_texts: Mapping[UUID, str]
+    ) -> LanguagePresenceResult:
         answer = presence.answer
         links = tuple(TranslationResult.of(t) for t in qaset.answer_translations(answer.id))
         return cls(
             presence.language_id,
             AnswerResult(answer.id, answer.text, links),
-            tuple(QuestionVariantResult.of(qaset, v) for v in presence.variants),
+            tuple(QuestionVariantResult.of(qaset, v, intent_texts) for v in presence.variants),
             presence.variant_count,
         )
 
@@ -81,11 +96,11 @@ class QASetResult:
     languages: tuple[LanguagePresenceResult, ...]
 
     @classmethod
-    def of(cls, qaset: QASet) -> QASetResult:
+    def of(cls, qaset: QASet, intent_texts: Mapping[UUID, str]) -> QASetResult:
         return cls(
             qaset.id,
             qaset.theme_id,
-            tuple(LanguagePresenceResult.of(qaset, p) for p in qaset.presences()),
+            tuple(LanguagePresenceResult.of(qaset, p, intent_texts) for p in qaset.presences()),
         )
 
 

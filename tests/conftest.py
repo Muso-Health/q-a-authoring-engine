@@ -55,6 +55,8 @@ def postgres_url() -> Iterator[str]:
 
 REPO_SCHEMA = "qa_authoring_repo_it"
 _TABLES = (
+    "variant_intents",
+    "intents",
     "answer_translation_links",
     "variant_translation_links",
     "question_variants",
