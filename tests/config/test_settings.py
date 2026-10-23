@@ -47,7 +47,7 @@ def test_instance_connection_name_selects_the_cloud_sql_connector(
 
 def test_unprefixed_env_vars_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DB_INSTANCE_CONNECTION_NAME", "proj:region:inst")
-    monkeypatch.setenv("BUDGETING_DB_INSTANCE_CONNECTION_NAME", "proj:region:inst")
+    monkeypatch.setenv("OTHER_DB_INSTANCE_CONNECTION_NAME", "proj:region:inst")
     assert _settings(monkeypatch).use_cloud_sql_connector is False
 
 

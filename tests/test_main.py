@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 def test_entrypoint_exposes_an_app_that_serves_health(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``uvicorn main:app`` — the same entrypoint as budgetisation-engine. The engine is lazy, so
+    """``uvicorn main:app`` is the entrypoint. The engine is lazy, so
     startup builds the container without dialling the (unreachable) database."""
     monkeypatch.setenv("QA_AUTHORING_DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:1/none")
     main = importlib.import_module("main")

@@ -10,8 +10,8 @@ requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
-    # Pinned: these three SHAPE the OpenAPI document — kept identical to budgetisation-engine so
-    # both backends emit the contract the same way. Bump deliberately, in both repos.
+    # Pinned: these three SHAPE the OpenAPI document, so an unpinned version could change the
+    # emitted contract between environments. Bump deliberately.
     "fastapi==0.139.2",
     "uvicorn[standard]",
     "pydantic==2.13.4",
@@ -31,7 +31,7 @@ dev = [
     "testcontainers[postgres]",
     "httpx",
     # Pinned: an unpinned mypy floats in CI, diverging from local. Pin so CI and local type-check
-    # identically (same version as budgetisation-engine).
+    # identically.
     "mypy==2.3.1",
     "ruff",
 ]
