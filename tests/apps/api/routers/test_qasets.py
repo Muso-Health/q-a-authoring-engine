@@ -78,7 +78,8 @@ def test_create_qaset(client: TestClient) -> None:
     [presence] = body["languages"]
     assert presence["language_id"] == fr
     assert presence["answer"]["text"] == "Rest."
-    assert set(presence["answer"]) == {"id", "text"}
+    assert set(presence["answer"]) == {"id", "text", "links"}
+    assert presence["answer"]["links"] == []
     assert presence["variants"] == []
     assert presence["variant_count"] == 0
     assert _ok(client.get(f"/qasets/{body['id']}"), 200) == body
@@ -254,7 +255,7 @@ def test_variant_lifecycle(client: TestClient, setup: tuple[str, str, str]) -> N
     created = _ok(
         client.post(f"/qasets/{qaset_id}/languages/{fr}/variants", json={"text": " What? "})
     )
-    assert created == {"id": created["id"], "language_id": fr, "text": "What?"}
+    assert created == {"id": created["id"], "language_id": fr, "text": "What?", "links": []}
     url = f"/qasets/{qaset_id}/variants/{created['id']}"
 
     patched = _ok(client.patch(url, json={"text": "What now?"}), 200)

@@ -8,11 +8,15 @@ from fastapi import APIRouter, Depends, Response, status
 from apps.api.dependencies import get_container
 from apps.api.schemas.qasets import (
     AnswerInLanguageRequest,
+    AnswerLinkResponse,
     LanguagePresenceResponse,
+    LinkAnswersRequest,
+    LinkVariantsRequest,
     QASetResponse,
     QASetsResponse,
     QuestionVariantResponse,
     TextRequest,
+    VariantLinkResponse,
 )
 from config.container import Container
 from qa_authoring.application.add_language_presence.command import AddLanguagePresenceCommand
@@ -23,10 +27,14 @@ from qa_authoring.application.delete_question_variant.command import (
     DeleteQuestionVariantCommand,
 )
 from qa_authoring.application.get_qaset.command import GetQASetQuery
+from qa_authoring.application.link_answers.command import LinkAnswersCommand
+from qa_authoring.application.link_variants.command import LinkVariantsCommand
 from qa_authoring.application.list_qasets.command import ListQASetsQuery
 from qa_authoring.application.remove_language_presence.command import (
     RemoveLanguagePresenceCommand,
 )
+from qa_authoring.application.unlink_answers.command import UnlinkAnswersCommand
+from qa_authoring.application.unlink_variants.command import UnlinkVariantsCommand
 from qa_authoring.application.update_answer.command import UpdateAnswerCommand
 from qa_authoring.application.update_question_variant.command import (
     UpdateQuestionVariantCommand,
@@ -130,4 +138,38 @@ async def delete_question_variant(
 ) -> Response:
     command = DeleteQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id)
     await container.run(container.build_delete_question_variant, command)
+    return _no_content()
+
+
+@router.post("/qasets/{qaset_id}/answer-links", status_code=status.HTTP_201_CREATED)
+async def link_answers(
+    qaset_id: UUID, body: LinkAnswersRequest, container: ContainerDep
+) -> AnswerLinkResponse:
+    """Link two answers of this QA set, in different languages, as translations (symmetric)."""
+    command = LinkAnswersCommand(
+        qaset_id=qaset_id, answer_a_id=body.answer_a_id, answer_b_id=body.answer_b_id
+    )
+    return AnswerLinkResponse.of(await container.run(container.build_link_answers, command))
+
+
+@router.delete("/qasets/{qaset_id}/answer-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_answers(qaset_id: UUID, link_id: UUID, container: ContainerDep) -> Response:
+    await container.run(container.build_unlink_answers, UnlinkAnswersCommand(qaset_id, link_id))
+    return _no_content()
+
+
+@router.post("/qasets/{qaset_id}/variant-links", status_code=status.HTTP_201_CREATED)
+async def link_variants(
+    qaset_id: UUID, body: LinkVariantsRequest, container: ContainerDep
+) -> VariantLinkResponse:
+    """Link two question variants of this QA set, in different languages (symmetric)."""
+    command = LinkVariantsCommand(
+        qaset_id=qaset_id, variant_a_id=body.variant_a_id, variant_b_id=body.variant_b_id
+    )
+    return VariantLinkResponse.of(await container.run(container.build_link_variants, command))
+
+
+@router.delete("/qasets/{qaset_id}/variant-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_variants(qaset_id: UUID, link_id: UUID, container: ContainerDep) -> Response:
+    await container.run(container.build_unlink_variants, UnlinkVariantsCommand(qaset_id, link_id))
     return _no_content()

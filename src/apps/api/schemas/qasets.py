@@ -13,6 +13,8 @@ if TYPE_CHECKING:
         QASetResult,
         QASetSummaryResult,
         QuestionVariantResult,
+        TranslationLinkResult,
+        TranslationResult,
     )
 
 # Text blankness is a domain rule (422 invalid_text); unknown fields are rejected here.
@@ -33,19 +35,74 @@ class TextRequest(_Strict):
     text: str
 
 
+class LinkAnswersRequest(_Strict):
+    answer_a_id: UUID
+    answer_b_id: UUID
+
+
+class LinkVariantsRequest(_Strict):
+    variant_a_id: UUID
+    variant_b_id: UUID
+
+
+class AnswerLinkResponse(BaseModel):
+    """``answer_ids`` is the canonical pair: the smaller id first, whatever the request order."""
+
+    id: UUID
+    answer_ids: tuple[UUID, UUID]
+
+    @classmethod
+    def of(cls, result: TranslationLinkResult) -> AnswerLinkResponse:
+        return cls(id=result.id, answer_ids=result.item_ids)
+
+
+class VariantLinkResponse(BaseModel):
+    """``variant_ids`` is the canonical pair: the smaller id first, whatever the request order."""
+
+    id: UUID
+    variant_ids: tuple[UUID, UUID]
+
+    @classmethod
+    def of(cls, result: TranslationLinkResult) -> VariantLinkResponse:
+        return cls(id=result.id, variant_ids=result.item_ids)
+
+
+class TranslationResponse(BaseModel):
+    """One translation link, seen from the item that carries it."""
+
+    link_id: UUID
+    other_id: UUID
+    other_language_id: UUID
+
+    @classmethod
+    def of(cls, result: TranslationResult) -> TranslationResponse:
+        return cls(
+            link_id=result.link_id,
+            other_id=result.other_id,
+            other_language_id=result.other_language_id,
+        )
+
+
 class AnswerResponse(BaseModel):
     id: UUID
     text: str
+    links: list[TranslationResponse]
 
 
 class QuestionVariantResponse(BaseModel):
     id: UUID
     language_id: UUID
     text: str
+    links: list[TranslationResponse]
 
     @classmethod
     def of(cls, result: QuestionVariantResult) -> QuestionVariantResponse:
-        return cls(id=result.id, language_id=result.language_id, text=result.text)
+        return cls(
+            id=result.id,
+            language_id=result.language_id,
+            text=result.text,
+            links=[TranslationResponse.of(link) for link in result.links],
+        )
 
 
 class LanguagePresenceResponse(BaseModel):
@@ -58,7 +115,11 @@ class LanguagePresenceResponse(BaseModel):
     def of(cls, result: LanguagePresenceResult) -> LanguagePresenceResponse:
         return cls(
             language_id=result.language_id,
-            answer=AnswerResponse(id=result.answer.id, text=result.answer.text),
+            answer=AnswerResponse(
+                id=result.answer.id,
+                text=result.answer.text,
+                links=[TranslationResponse.of(link) for link in result.answer.links],
+            ),
             variants=[QuestionVariantResponse.of(v) for v in result.variants],
             variant_count=result.variant_count,
         )

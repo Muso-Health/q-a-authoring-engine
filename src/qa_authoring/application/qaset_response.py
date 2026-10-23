@@ -5,13 +5,41 @@ from typing import TYPE_CHECKING
 from uuid import UUID  # noqa: TC003 — a field type on frozen result dataclasses
 
 if TYPE_CHECKING:
-    from qa_authoring.domain.model.qaset import LanguagePresence, QASet, QuestionVariant
+    from qa_authoring.domain.model.qaset import (
+        LanguagePresence,
+        QASet,
+        QuestionVariant,
+        Translation,
+        TranslationLink,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationResult:
+    link_id: UUID
+    other_id: UUID
+    other_language_id: UUID
+
+    @classmethod
+    def of(cls, translation: Translation) -> TranslationResult:
+        return cls(translation.link_id, translation.other_id, translation.other_language_id)
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationLinkResult:
+    id: UUID
+    item_ids: tuple[UUID, UUID]
+
+    @classmethod
+    def of(cls, link: TranslationLink) -> TranslationLinkResult:
+        return cls(link.id, (link.low_id, link.high_id))
 
 
 @dataclass(frozen=True, slots=True)
 class AnswerResult:
     id: UUID
     text: str
+    links: tuple[TranslationResult, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,10 +47,12 @@ class QuestionVariantResult:
     id: UUID
     language_id: UUID
     text: str
+    links: tuple[TranslationResult, ...]
 
     @classmethod
-    def of(cls, variant: QuestionVariant) -> QuestionVariantResult:
-        return cls(variant.id, variant.language_id, variant.text)
+    def of(cls, qaset: QASet, variant: QuestionVariant) -> QuestionVariantResult:
+        links = tuple(TranslationResult.of(t) for t in qaset.variant_translations(variant.id))
+        return cls(variant.id, variant.language_id, variant.text, links)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,11 +63,13 @@ class LanguagePresenceResult:
     variant_count: int
 
     @classmethod
-    def of(cls, presence: LanguagePresence) -> LanguagePresenceResult:
+    def of(cls, qaset: QASet, presence: LanguagePresence) -> LanguagePresenceResult:
+        answer = presence.answer
+        links = tuple(TranslationResult.of(t) for t in qaset.answer_translations(answer.id))
         return cls(
             presence.language_id,
-            AnswerResult(presence.answer.id, presence.answer.text),
-            tuple(QuestionVariantResult.of(v) for v in presence.variants),
+            AnswerResult(answer.id, answer.text, links),
+            tuple(QuestionVariantResult.of(qaset, v) for v in presence.variants),
             presence.variant_count,
         )
 
@@ -53,7 +85,7 @@ class QASetResult:
         return cls(
             qaset.id,
             qaset.theme_id,
-            tuple(LanguagePresenceResult.of(p) for p in qaset.presences()),
+            tuple(LanguagePresenceResult.of(qaset, p) for p in qaset.presences()),
         )
 
 

@@ -48,7 +48,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0005_creation_order",)]
+    assert versions == [("0006_translation_links",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -82,6 +82,24 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         )
     )
     assert foreign_keys == [
+        (
+            "fk_answer_translation_links_answer_high_id_answers",
+            "answer_translation_links",
+            "answers",
+            "CASCADE",
+        ),
+        (
+            "fk_answer_translation_links_answer_low_id_answers",
+            "answer_translation_links",
+            "answers",
+            "CASCADE",
+        ),
+        (
+            "fk_answer_translation_links_qaset_id_qasets",
+            "answer_translation_links",
+            "qasets",
+            "CASCADE",
+        ),
         ("fk_answers_language_id_languages", "answers", "languages", "RESTRICT"),
         ("fk_answers_qaset_id_qasets", "answers", "qasets", "CASCADE"),
         ("fk_projects_base_language_id_languages", "projects", "languages", "RESTRICT"),
@@ -96,6 +114,39 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("fk_question_variants_qaset_id_answers", "question_variants", "answers", "CASCADE"),
         ("fk_question_variants_qaset_id_qasets", "question_variants", "qasets", "CASCADE"),
         ("fk_themes_protocol_id_protocols", "themes", "protocols", "RESTRICT"),
+        (
+            "fk_variant_translation_links_qaset_id_qasets",
+            "variant_translation_links",
+            "qasets",
+            "CASCADE",
+        ),
+        (
+            "fk_variant_translation_links_variant_high_id_question_variants",
+            "variant_translation_links",
+            "question_variants",
+            "CASCADE",
+        ),
+        (
+            "fk_variant_translation_links_variant_low_id_question_variants",
+            "variant_translation_links",
+            "question_variants",
+            "CASCADE",
+        ),
+    ]
+    link_constraints = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' AND table_name LIKE '%translation_links' "
+            "AND constraint_type IN ('UNIQUE', 'CHECK') AND constraint_name NOT LIKE '%not_null' "
+            "ORDER BY constraint_name",
+        )
+    )
+    assert link_constraints == [
+        ("ck_answer_translation_links_canonical_pair", "CHECK"),
+        ("ck_variant_translation_links_canonical_pair", "CHECK"),
+        ("uq_answer_translation_links_pair", "UNIQUE"),
+        ("uq_variant_translation_links_pair", "UNIQUE"),
     ]
     unique = asyncio.run(
         _query(
@@ -114,6 +165,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         )
     )
     assert indexes == [
+        ("ix_answer_translation_links_answer_high_id",),
+        ("ix_answer_translation_links_answer_low_id",),
         ("ix_answers_language_id",),
         ("ix_projects_base_language_id",),
         ("ix_protocols_project_id",),
@@ -121,6 +174,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_question_variants_language_id",),
         ("ix_question_variants_qaset_id_language_id",),
         ("ix_themes_protocol_id",),
+        ("ix_variant_translation_links_variant_high_id",),
+        ("ix_variant_translation_links_variant_low_id",),
     ]
 
     created_at = asyncio.run(
@@ -132,8 +187,13 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         )
     )
     assert created_at == [
-        ("answers", "timestamp with time zone", "NO", "now()"),
-        ("question_variants", "timestamp with time zone", "NO", "now()"),
+        (table, "timestamp with time zone", "NO", "now()")
+        for table in (
+            "answer_translation_links",
+            "answers",
+            "question_variants",
+            "variant_translation_links",
+        )
     ]
     command.downgrade(_alembic_config(), "0004_qasets")
     assert (
@@ -141,7 +201,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             _query(
                 postgres_url,
                 "SELECT 1 FROM information_schema.columns "
-                f"WHERE table_schema = '{SCHEMA}' AND column_name = 'created_at'",
+                f"WHERE table_schema = '{SCHEMA}' AND (column_name = 'created_at' "
+                "OR table_name LIKE '%translation_links')",
             )
         )
         == []

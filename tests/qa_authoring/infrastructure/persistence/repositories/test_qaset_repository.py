@@ -44,18 +44,20 @@ async def _seed(engine: AsyncEngine) -> tuple[UUID, UUID, UUID]:
 
 
 def _snapshot(qaset: QASet) -> object:
+    # Content only: children created in one transaction share now(), so their relative order is
+    # the id tie-breaker. Creation order across transactions is tested separately.
     return (
         qaset.id,
         qaset.theme_id,
-        [
+        sorted(
             (
-                p.language_id,
+                str(p.language_id),
                 p.answer.id,
                 p.answer.text,
                 sorted((v.id, v.text) for v in p.variants),
             )
             for p in qaset.presences()
-        ],
+        ),
     )
 
 

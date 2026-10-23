@@ -19,6 +19,8 @@ from qa_authoring.application.get_project.handler import GetProjectHandler
 from qa_authoring.application.get_protocol.handler import GetProtocolHandler
 from qa_authoring.application.get_qaset.handler import GetQASetHandler
 from qa_authoring.application.get_theme.handler import GetThemeHandler
+from qa_authoring.application.link_answers.handler import LinkAnswersHandler
+from qa_authoring.application.link_variants.handler import LinkVariantsHandler
 from qa_authoring.application.list_languages.handler import ListLanguagesHandler
 from qa_authoring.application.list_projects.handler import ListProjectsHandler
 from qa_authoring.application.list_protocols.handler import ListProtocolsHandler
@@ -26,6 +28,8 @@ from qa_authoring.application.list_qasets.handler import ListQASetsHandler
 from qa_authoring.application.list_themes.handler import ListThemesHandler
 from qa_authoring.application.register_language.handler import RegisterLanguageHandler
 from qa_authoring.application.remove_language_presence.handler import RemoveLanguagePresenceHandler
+from qa_authoring.application.unlink_answers.handler import UnlinkAnswersHandler
+from qa_authoring.application.unlink_variants.handler import UnlinkVariantsHandler
 from qa_authoring.application.update_answer.handler import UpdateAnswerHandler
 from qa_authoring.application.update_language.handler import UpdateLanguageHandler
 from qa_authoring.application.update_project.handler import UpdateProjectHandler
@@ -147,3 +151,15 @@ class Container:
 
     def build_delete_qaset(self, uow: UnitOfWork) -> DeleteQASetHandler:
         return DeleteQASetHandler(uow.qasets)
+
+    def build_link_answers(self, uow: UnitOfWork) -> LinkAnswersHandler:
+        return LinkAnswersHandler(uow.qasets)
+
+    def build_unlink_answers(self, uow: UnitOfWork) -> UnlinkAnswersHandler:
+        return UnlinkAnswersHandler(uow.qasets)
+
+    def build_link_variants(self, uow: UnitOfWork) -> LinkVariantsHandler:
+        return LinkVariantsHandler(uow.qasets)
+
+    def build_unlink_variants(self, uow: UnitOfWork) -> UnlinkVariantsHandler:
+        return UnlinkVariantsHandler(uow.qasets)

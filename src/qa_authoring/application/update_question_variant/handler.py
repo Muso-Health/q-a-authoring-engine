@@ -20,4 +20,4 @@ class UpdateQuestionVariantHandler:
         qaset = await load_qaset(self._qasets, command.qaset_id)
         variant = qaset.update_variant(command.variant_id, command.text)
         await self._qasets.save(qaset)
-        return QuestionVariantResult.of(variant)
+        return QuestionVariantResult.of(qaset, variant)

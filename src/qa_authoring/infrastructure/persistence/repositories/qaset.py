@@ -8,16 +8,18 @@ from sqlalchemy.exc import IntegrityError
 
 from qa_authoring.application.qaset_errors import UnknownLanguageError
 from qa_authoring.application.theme_errors import ThemeNotFoundError
-from qa_authoring.domain.model.qaset import Answer, QASet, QuestionVariant
+from qa_authoring.domain.model.qaset import Answer, QASet, QuestionVariant, TranslationLink
 from qa_authoring.infrastructure.persistence.repositories._integrity import (
     FOREIGN_KEY_VIOLATION,
     constraint_name,
     sqlstate,
 )
 from qa_authoring.infrastructure.persistence.schema.qaset import (
+    answer_translation_links,
     answers,
     qasets,
     question_variants,
+    variant_translation_links,
 )
 
 if TYPE_CHECKING:
@@ -27,12 +29,33 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection
 
 
+class _LinkTable:
+    """One translation-link table: ``<item>_low_id`` / ``<item>_high_id`` columns."""
+
+    def __init__(self, table: Table, item: str) -> None:
+        self.table = table
+        self.low = table.c[f"{item}_low_id"]
+        self.high = table.c[f"{item}_high_id"]
+
+    def row(self, qaset_id: UUID, link: TranslationLink) -> dict[str, UUID]:
+        return {
+            "id": link.id,
+            "qaset_id": qaset_id,
+            self.low.key: link.low_id,
+            self.high.key: link.high_id,
+        }
+
+
+_ANSWER_LINKS = _LinkTable(answer_translation_links, "answer")
+_VARIANT_LINKS = _LinkTable(variant_translation_links, "variant")
+
+
 class PostgresQASetRepository:
     """Persists the QASet aggregate across ``qasets``, ``answers`` and ``question_variants``.
 
     ``save`` diffs the aggregate against the stored child rows (delete removed, insert new, update
-    changed text), so surviving rows keep their ``created_at``. Children load in creation order
-    (``created_at`` then ``id``), which is the order the aggregate keeps them in.
+    changed text), so surviving rows keep their ``created_at``. Children and translation links load
+    in creation order (``created_at`` then ``id``), which is the order the aggregate keeps them in.
     """
 
     def __init__(self, connection: AsyncConnection) -> None:
@@ -49,6 +72,8 @@ class PostgresQASetRepository:
             raise
         await self._insert(answers, qaset.id, qaset.answers)
         await self._insert(question_variants, qaset.id, qaset.variants)
+        await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
+        await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
     async def get(self, qaset_id: UUID) -> QASet | None:
         row = (
@@ -82,6 +107,10 @@ class PostgresQASetRepository:
         )
         await self._update_changed(answers, stored_answers, qaset.answers)
         await self._update_changed(question_variants, stored_variants, qaset.variants)
+        # Links last: they reference answers/variants inserted above. Links of removed items
+        # are already gone (ON DELETE CASCADE).
+        await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
+        await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
     async def delete(self, qaset_id: UUID) -> None:
         await self._connection.execute(delete(qasets).where(qasets.c.id == qaset_id))
@@ -135,6 +164,34 @@ class PostgresQASetRepository:
                 raise UnknownLanguageError(None) from exc
             raise
 
+    async def _save_links(
+        self, links: _LinkTable, qaset_id: UUID, current: Sequence[TranslationLink]
+    ) -> None:
+        stored: set[UUID] = set(
+            await self._connection.scalars(
+                select(links.table.c.id).where(links.table.c.qaset_id == qaset_id)
+            )
+        )
+        missing = stored - {link.id for link in current}
+        if missing:
+            await self._connection.execute(delete(links.table).where(links.table.c.id.in_(missing)))
+        new = [links.row(qaset_id, link) for link in current if link.id not in stored]
+        if new:
+            await self._connection.execute(insert(links.table), new)
+
+    async def _load_links(
+        self, links: _LinkTable, qaset_ids: list[UUID]
+    ) -> defaultdict[UUID, list[TranslationLink]]:
+        by_qaset: defaultdict[UUID, list[TranslationLink]] = defaultdict(list)
+        rows = await self._connection.execute(
+            select(links.table.c.id, links.table.c.qaset_id, links.low, links.high)
+            .where(links.table.c.qaset_id.in_(qaset_ids))
+            .order_by(links.table.c.created_at, links.table.c.id)
+        )
+        for row in rows:
+            by_qaset[row.qaset_id].append(TranslationLink(row.id, row[2], row[3]))
+        return by_qaset
+
     async def _hydrate(self, rows: Sequence[Any]) -> tuple[QASet, ...]:
         if not rows:
             return ()
@@ -153,12 +210,16 @@ class PostgresQASetRepository:
             .order_by(question_variants.c.created_at, question_variants.c.id)
         ):
             variants_by_qaset[v.qaset_id].append(QuestionVariant(v.id, v.language_id, v.text))
+        answer_links = await self._load_links(_ANSWER_LINKS, ids)
+        variant_links = await self._load_links(_VARIANT_LINKS, ids)
         return tuple(
             QASet(
                 row.id,
                 row.theme_id,
                 answers=answers_by_qaset[row.id],
                 variants=variants_by_qaset[row.id],
+                answer_links=answer_links[row.id],
+                variant_links=variant_links[row.id],
             )
             for row in rows
         )

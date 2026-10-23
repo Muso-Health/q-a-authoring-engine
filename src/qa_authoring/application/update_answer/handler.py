@@ -18,4 +18,4 @@ class UpdateAnswerHandler:
         qaset = await load_qaset(self._qasets, command.qaset_id)
         qaset.update_answer(command.language_id, command.text)
         await self._qasets.save(qaset)
-        return LanguagePresenceResult.of(qaset.presence(command.language_id))
+        return LanguagePresenceResult.of(qaset, qaset.presence(command.language_id))

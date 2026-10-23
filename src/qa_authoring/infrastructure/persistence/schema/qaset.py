@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -67,4 +68,38 @@ question_variants = Table(
         ondelete="CASCADE",
     ),
     Index("ix_question_variants_qaset_id_language_id", "qaset_id", "language_id"),
+)
+
+
+def _translation_links(name: str, item: str, item_table: str) -> Table:
+    # Undirected pair stored canonically (low < high), so a pair exists at most once.
+    return Table(
+        name,
+        metadata,
+        Column("id", Uuid, nullable=False),
+        Column("qaset_id", Uuid, ForeignKey("qasets.id", ondelete="CASCADE"), nullable=False),
+        Column(
+            f"{item}_low_id",
+            Uuid,
+            ForeignKey(f"{item_table}.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+        Column(
+            f"{item}_high_id",
+            Uuid,
+            ForeignKey(f"{item_table}.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+        Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+        PrimaryKeyConstraint("id"),
+        UniqueConstraint("qaset_id", f"{item}_low_id", f"{item}_high_id", name=f"uq_{name}_pair"),
+        CheckConstraint(f"{item}_low_id < {item}_high_id", name="canonical_pair"),
+    )
+
+
+answer_translation_links = _translation_links("answer_translation_links", "answer", "answers")
+variant_translation_links = _translation_links(
+    "variant_translation_links", "variant", "question_variants"
 )

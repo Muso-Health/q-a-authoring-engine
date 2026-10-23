@@ -20,4 +20,4 @@ class AddQuestionVariantHandler:
         qaset = await load_qaset(self._qasets, command.qaset_id)
         variant = qaset.add_variant(command.language_id, command.text)
         await self._qasets.save(qaset)
-        return QuestionVariantResult.of(variant)
+        return QuestionVariantResult.of(qaset, variant)
