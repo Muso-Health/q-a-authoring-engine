@@ -10,3 +10,9 @@ class ThemeNotFoundError(Exception):
     def __init__(self, theme_id: UUID) -> None:
         super().__init__(f"theme {theme_id} not found")
         self.theme_id = theme_id
+
+
+class ThemeHasQASetsError(Exception):
+    def __init__(self, theme_id: UUID) -> None:
+        super().__init__(f"theme {theme_id} still has QA sets")
+        self.theme_id = theme_id

@@ -6,6 +6,7 @@ from sqlalchemy import delete, exists, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from qa_authoring.application.protocol_errors import ProtocolNotFoundError
+from qa_authoring.application.theme_errors import ThemeHasQASetsError
 from qa_authoring.domain.model.theme import Theme
 from qa_authoring.infrastructure.persistence.repositories._integrity import (
     FOREIGN_KEY_VIOLATION,
@@ -64,7 +65,12 @@ class PostgresThemeRepository:
         )
 
     async def delete(self, theme_id: UUID) -> None:
-        await self._connection.execute(delete(themes).where(themes.c.id == theme_id))
+        try:
+            await self._connection.execute(delete(themes).where(themes.c.id == theme_id))
+        except IntegrityError as exc:
+            if sqlstate(exc) == FOREIGN_KEY_VIOLATION:
+                raise ThemeHasQASetsError(theme_id) from exc
+            raise
 
     async def exists_for_protocol(self, protocol_id: UUID) -> bool:
         query = select(exists().where(themes.c.protocol_id == protocol_id))

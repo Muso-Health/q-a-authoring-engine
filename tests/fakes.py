@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Self
 
@@ -12,10 +13,12 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
+    from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
     from qa_authoring.domain.model.protocol import Protocol
+    from qa_authoring.domain.model.qaset import QASet
     from qa_authoring.domain.model.theme import Theme
     from qa_authoring.domain.value_objects.language_code import LanguageCode
 
@@ -114,12 +117,45 @@ class InMemoryThemeRepository:
         return any(row.protocol_id == protocol_id for row in self.rows.values())
 
 
+class InMemoryQASetRepository:
+    """Stores copies, so a handler that forgets to ``save`` loses its changes — as in the DB."""
+
+    def __init__(self) -> None:
+        self.rows: dict[UUID, QASet] = {}
+
+    async def add(self, qaset: QASet) -> None:
+        self.rows[qaset.id] = deepcopy(qaset)
+
+    async def get(self, qaset_id: UUID) -> QASet | None:
+        row = self.rows.get(qaset_id)
+        return None if row is None else deepcopy(row)
+
+    async def list_by_theme(self, theme_id: UUID) -> tuple[QASet, ...]:
+        rows = [row for row in self.rows.values() if row.theme_id == theme_id]
+        return tuple(deepcopy(row) for row in sorted(rows, key=lambda row: str(row.id)))
+
+    async def save(self, qaset: QASet) -> None:
+        self.rows[qaset.id] = deepcopy(qaset)
+
+    async def delete(self, qaset_id: UUID) -> None:
+        self.rows.pop(qaset_id, None)
+
+    async def exists_for_theme(self, theme_id: UUID) -> bool:
+        return any(row.theme_id == theme_id for row in self.rows.values())
+
+    async def uses_language(self, language_id: UUID) -> bool:
+        return any(
+            p.language_id == language_id for row in self.rows.values() for p in row.presences()
+        )
+
+
 @dataclass
 class InMemoryStore:
     languages: InMemoryLanguageRepository = field(default_factory=InMemoryLanguageRepository)
     projects: InMemoryProjectRepository = field(default_factory=InMemoryProjectRepository)
     protocols: InMemoryProtocolRepository = field(default_factory=InMemoryProtocolRepository)
     themes: InMemoryThemeRepository = field(default_factory=InMemoryThemeRepository)
+    qasets: InMemoryQASetRepository = field(default_factory=InMemoryQASetRepository)
 
 
 class InMemoryUnitOfWork:
@@ -127,12 +163,14 @@ class InMemoryUnitOfWork:
     projects: ProjectRepository
     protocols: ProtocolRepository
     themes: ThemeRepository
+    qasets: QASetRepository
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
         self.projects = store.projects
         self.protocols = store.protocols
         self.themes = store.themes
+        self.qasets = store.qasets
 
     async def __aenter__(self) -> Self:
         return self

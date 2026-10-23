@@ -48,7 +48,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0003_catalog",)]
+    assert versions == [("0004_qasets",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -71,7 +71,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     foreign_keys = asyncio.run(
         _query(
             postgres_url,
-            "SELECT tc.constraint_name, tc.table_name, ccu.table_name, rc.delete_rule "
+            "SELECT DISTINCT tc.constraint_name, tc.table_name, ccu.table_name, rc.delete_rule "
             "FROM information_schema.table_constraints tc "
             "JOIN information_schema.referential_constraints rc "
             "ON rc.constraint_name = tc.constraint_name AND rc.constraint_schema = tc.table_schema "
@@ -82,10 +82,30 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         )
     )
     assert foreign_keys == [
+        ("fk_answers_language_id_languages", "answers", "languages", "RESTRICT"),
+        ("fk_answers_qaset_id_qasets", "answers", "qasets", "CASCADE"),
         ("fk_projects_base_language_id_languages", "projects", "languages", "RESTRICT"),
         ("fk_protocols_project_id_projects", "protocols", "projects", "RESTRICT"),
+        ("fk_qasets_theme_id_themes", "qasets", "themes", "RESTRICT"),
+        (
+            "fk_question_variants_language_id_languages",
+            "question_variants",
+            "languages",
+            "RESTRICT",
+        ),
+        ("fk_question_variants_qaset_id_answers", "question_variants", "answers", "CASCADE"),
+        ("fk_question_variants_qaset_id_qasets", "question_variants", "qasets", "CASCADE"),
         ("fk_themes_protocol_id_protocols", "themes", "protocols", "RESTRICT"),
     ]
+    unique = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' AND table_name = 'answers' "
+            "AND constraint_type = 'UNIQUE'",
+        )
+    )
+    assert unique == [("uq_answers_qaset_id_language_id",)]
     indexes = asyncio.run(
         _query(
             postgres_url,
@@ -94,8 +114,12 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         )
     )
     assert indexes == [
+        ("ix_answers_language_id",),
         ("ix_projects_base_language_id",),
         ("ix_protocols_project_id",),
+        ("ix_qasets_theme_id",),
+        ("ix_question_variants_language_id",),
+        ("ix_question_variants_qaset_id_language_id",),
         ("ix_themes_protocol_id",),
     ]
 

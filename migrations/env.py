@@ -7,7 +7,8 @@ from alembic import context
 from sqlalchemy import text
 
 import qa_authoring.infrastructure.persistence.schema.catalog
-import qa_authoring.infrastructure.persistence.schema.language  # noqa: F401
+import qa_authoring.infrastructure.persistence.schema.language
+import qa_authoring.infrastructure.persistence.schema.qaset  # noqa: F401
 from config.database import engine_factory_from_settings
 from config.settings import Settings
 from qa_authoring.infrastructure.persistence.metadata import metadata

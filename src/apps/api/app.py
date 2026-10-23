@@ -10,6 +10,7 @@ from apps.api.routers.health import router as health_router
 from apps.api.routers.languages import router as languages_router
 from apps.api.routers.projects import router as projects_router
 from apps.api.routers.protocols import router as protocols_router
+from apps.api.routers.qasets import router as qasets_router
 from apps.api.routers.themes import router as themes_router
 from apps.api.version import API_VERSION
 
@@ -53,6 +54,7 @@ def create_app(
         projects_router,
         protocols_router,
         themes_router,
+        qasets_router,
     ):
         app.include_router(router)
     return app

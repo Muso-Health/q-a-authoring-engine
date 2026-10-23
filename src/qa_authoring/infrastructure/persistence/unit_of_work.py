@@ -9,6 +9,7 @@ from qa_authoring.infrastructure.persistence.repositories.project import Postgre
 from qa_authoring.infrastructure.persistence.repositories.protocol import (
     PostgresProtocolRepository,
 )
+from qa_authoring.infrastructure.persistence.repositories.qaset import PostgresQASetRepository
 from qa_authoring.infrastructure.persistence.repositories.theme import PostgresThemeRepository
 
 if TYPE_CHECKING:
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
+    from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
 
 
@@ -30,6 +32,7 @@ class SqlAlchemyUnitOfWork:
     projects: ProjectRepository
     protocols: ProtocolRepository
     themes: ThemeRepository
+    qasets: QASetRepository
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -43,6 +46,7 @@ class SqlAlchemyUnitOfWork:
         self.projects = PostgresProjectRepository(self._connection)
         self.protocols = PostgresProtocolRepository(self._connection)
         self.themes = PostgresThemeRepository(self._connection)
+        self.qasets = PostgresQASetRepository(self._connection)
         return self
 
     async def __aexit__(

@@ -22,10 +22,17 @@ from qa_authoring.application.protocol_errors import (
     ProtocolHasThemesError,
     ProtocolNotFoundError,
 )
-from qa_authoring.application.theme_errors import ThemeNotFoundError
+from qa_authoring.application.qaset_errors import QASetNotFoundError, UnknownLanguageError
+from qa_authoring.application.theme_errors import ThemeHasQASetsError, ThemeNotFoundError
 from qa_authoring.domain.model.language import InvalidLanguageNameError
+from qa_authoring.domain.model.qaset import (
+    LanguageAlreadyPresentError,
+    LanguageNotPresentError,
+    LanguagePresenceRequiredError,
+    QuestionVariantNotFoundError,
+)
 from qa_authoring.domain.value_objects.language_code import InvalidLanguageCodeError
-from qa_authoring.domain.value_objects.naming import InvalidNameError
+from qa_authoring.domain.value_objects.naming import InvalidNameError, InvalidTextError
 
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request
@@ -44,14 +51,22 @@ _RULES: dict[type[Exception], _Rule] = {
     ProjectNotFoundError: _Rule(404, "project_not_found"),
     ProtocolNotFoundError: _Rule(404, "protocol_not_found"),
     ThemeNotFoundError: _Rule(404, "theme_not_found"),
+    QASetNotFoundError: _Rule(404, "qaset_not_found"),
+    LanguageNotPresentError: _Rule(404, "language_not_present"),
+    QuestionVariantNotFoundError: _Rule(404, "variant_not_found"),
     LanguageCodeAlreadyExistsError: _Rule(409, "language_code_already_exists"),
     LanguageInUseError: _Rule(409, "language_in_use"),
     ProjectHasProtocolsError: _Rule(409, "project_has_protocols"),
     ProtocolHasThemesError: _Rule(409, "protocol_has_themes"),
+    ThemeHasQASetsError: _Rule(409, "theme_has_qasets"),
+    LanguageAlreadyPresentError: _Rule(409, "language_already_present"),
+    LanguagePresenceRequiredError: _Rule(409, "language_presence_required"),
     InvalidLanguageCodeError: _Rule(422, "invalid_language_code"),
     InvalidLanguageNameError: _Rule(422, "invalid_language_name"),
     InvalidNameError: _Rule(422, "invalid_name"),
     UnknownBaseLanguageError: _Rule(422, "unknown_base_language"),
+    InvalidTextError: _Rule(422, "invalid_text"),
+    UnknownLanguageError: _Rule(422, "unknown_language"),
 }
 
 _VALIDATION_CODE = "invalid_request"

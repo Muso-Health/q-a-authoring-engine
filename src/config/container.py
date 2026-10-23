@@ -2,25 +2,35 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from qa_authoring.application.add_language_presence.handler import AddLanguagePresenceHandler
+from qa_authoring.application.add_question_variant.handler import AddQuestionVariantHandler
 from qa_authoring.application.create_project.handler import CreateProjectHandler
 from qa_authoring.application.create_protocol.handler import CreateProtocolHandler
+from qa_authoring.application.create_qaset.handler import CreateQASetHandler
 from qa_authoring.application.create_theme.handler import CreateThemeHandler
 from qa_authoring.application.delete_language.handler import DeleteLanguageHandler
 from qa_authoring.application.delete_project.handler import DeleteProjectHandler
 from qa_authoring.application.delete_protocol.handler import DeleteProtocolHandler
+from qa_authoring.application.delete_qaset.handler import DeleteQASetHandler
+from qa_authoring.application.delete_question_variant.handler import DeleteQuestionVariantHandler
 from qa_authoring.application.delete_theme.handler import DeleteThemeHandler
 from qa_authoring.application.get_language.handler import GetLanguageHandler
 from qa_authoring.application.get_project.handler import GetProjectHandler
 from qa_authoring.application.get_protocol.handler import GetProtocolHandler
+from qa_authoring.application.get_qaset.handler import GetQASetHandler
 from qa_authoring.application.get_theme.handler import GetThemeHandler
 from qa_authoring.application.list_languages.handler import ListLanguagesHandler
 from qa_authoring.application.list_projects.handler import ListProjectsHandler
 from qa_authoring.application.list_protocols.handler import ListProtocolsHandler
+from qa_authoring.application.list_qasets.handler import ListQASetsHandler
 from qa_authoring.application.list_themes.handler import ListThemesHandler
 from qa_authoring.application.register_language.handler import RegisterLanguageHandler
+from qa_authoring.application.remove_language_presence.handler import RemoveLanguagePresenceHandler
+from qa_authoring.application.update_answer.handler import UpdateAnswerHandler
 from qa_authoring.application.update_language.handler import UpdateLanguageHandler
 from qa_authoring.application.update_project.handler import UpdateProjectHandler
 from qa_authoring.application.update_protocol.handler import UpdateProtocolHandler
+from qa_authoring.application.update_question_variant.handler import UpdateQuestionVariantHandler
 from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 
 if TYPE_CHECKING:
@@ -61,7 +71,7 @@ class Container:
         return UpdateLanguageHandler(uow.languages)
 
     def build_delete_language(self, uow: UnitOfWork) -> DeleteLanguageHandler:
-        return DeleteLanguageHandler(uow.languages, uow.projects)
+        return DeleteLanguageHandler(uow.languages, uow.projects, uow.qasets)
 
     def build_create_project(self, uow: UnitOfWork) -> CreateProjectHandler:
         return CreateProjectHandler(uow.projects, uow.languages)
@@ -106,4 +116,34 @@ class Container:
         return UpdateThemeHandler(uow.themes)
 
     def build_delete_theme(self, uow: UnitOfWork) -> DeleteThemeHandler:
-        return DeleteThemeHandler(uow.themes)
+        return DeleteThemeHandler(uow.themes, uow.qasets)
+
+    def build_create_qaset(self, uow: UnitOfWork) -> CreateQASetHandler:
+        return CreateQASetHandler(uow.qasets, uow.themes, uow.languages)
+
+    def build_add_language_presence(self, uow: UnitOfWork) -> AddLanguagePresenceHandler:
+        return AddLanguagePresenceHandler(uow.qasets, uow.languages)
+
+    def build_update_answer(self, uow: UnitOfWork) -> UpdateAnswerHandler:
+        return UpdateAnswerHandler(uow.qasets)
+
+    def build_remove_language_presence(self, uow: UnitOfWork) -> RemoveLanguagePresenceHandler:
+        return RemoveLanguagePresenceHandler(uow.qasets)
+
+    def build_add_question_variant(self, uow: UnitOfWork) -> AddQuestionVariantHandler:
+        return AddQuestionVariantHandler(uow.qasets)
+
+    def build_update_question_variant(self, uow: UnitOfWork) -> UpdateQuestionVariantHandler:
+        return UpdateQuestionVariantHandler(uow.qasets)
+
+    def build_delete_question_variant(self, uow: UnitOfWork) -> DeleteQuestionVariantHandler:
+        return DeleteQuestionVariantHandler(uow.qasets)
+
+    def build_get_qaset(self, uow: UnitOfWork) -> GetQASetHandler:
+        return GetQASetHandler(uow.qasets)
+
+    def build_list_qasets(self, uow: UnitOfWork) -> ListQASetsHandler:
+        return ListQASetsHandler(uow.qasets, uow.themes)
+
+    def build_delete_qaset(self, uow: UnitOfWork) -> DeleteQASetHandler:
+        return DeleteQASetHandler(uow.qasets)

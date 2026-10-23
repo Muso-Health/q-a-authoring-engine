@@ -188,7 +188,7 @@ async def test_delete_language_used_as_base_language_is_a_conflict(store: InMemo
         CreateProjectCommand(name="Malaria", description=None, base_language_id=language_id)
     )
     with pytest.raises(LanguageInUseError):
-        await DeleteLanguageHandler(store.languages, store.projects)(
+        await DeleteLanguageHandler(store.languages, store.projects, store.qasets)(
             DeleteLanguageCommand(language_id)
         )
     assert language_id in store.languages.rows
@@ -196,7 +196,9 @@ async def test_delete_language_used_as_base_language_is_a_conflict(store: InMemo
 
 async def test_delete_unused_language(store: InMemoryStore) -> None:
     language_id = await _language(store)
-    await DeleteLanguageHandler(store.languages, store.projects)(DeleteLanguageCommand(language_id))
+    await DeleteLanguageHandler(store.languages, store.projects, store.qasets)(
+        DeleteLanguageCommand(language_id)
+    )
     assert language_id not in store.languages.rows
 
 
@@ -308,7 +310,7 @@ async def test_theme_get_update_delete(store: InMemoryStore) -> None:
         UpdateThemeCommand(theme_id, description="High temperature")
     )
     assert (updated.name, updated.description) == ("Fever", "High temperature")
-    await DeleteThemeHandler(store.themes)(DeleteThemeCommand(theme_id))
+    await DeleteThemeHandler(store.themes, store.qasets)(DeleteThemeCommand(theme_id))
     assert theme_id not in store.themes.rows
 
 
@@ -318,4 +320,4 @@ async def test_theme_missing_id(store: InMemoryStore) -> None:
     with pytest.raises(ThemeNotFoundError):
         await UpdateThemeHandler(store.themes)(UpdateThemeCommand(uuid4(), name="X"))
     with pytest.raises(ThemeNotFoundError):
-        await DeleteThemeHandler(store.themes)(DeleteThemeCommand(uuid4()))
+        await DeleteThemeHandler(store.themes, store.qasets)(DeleteThemeCommand(uuid4()))

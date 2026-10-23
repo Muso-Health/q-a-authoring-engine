@@ -17,3 +17,14 @@ def clean_description(description: str | None) -> str | None:
     if description is None:
         return None
     return description.strip() or None
+
+
+class InvalidTextError(ValueError):
+    """Raised when an answer or question text is blank."""
+
+
+def clean_text(text: str, *, subject: str) -> str:
+    cleaned = text.strip()
+    if not cleaned:
+        raise InvalidTextError(f"{subject} text must not be blank")
+    return cleaned

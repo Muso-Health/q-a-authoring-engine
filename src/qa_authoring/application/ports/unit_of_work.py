@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
+    from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
 
 
@@ -19,6 +20,7 @@ class UnitOfWork(Protocol):
     projects: ProjectRepository
     protocols: ProtocolRepository
     themes: ThemeRepository
+    qasets: QASetRepository
 
     async def __aenter__(self) -> Self: ...
 

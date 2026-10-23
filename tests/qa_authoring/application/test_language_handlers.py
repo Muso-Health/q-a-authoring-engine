@@ -20,7 +20,11 @@ from qa_authoring.application.update_language.command import UpdateLanguageComma
 from qa_authoring.application.update_language.handler import UpdateLanguageHandler
 from qa_authoring.domain.model.language import InvalidLanguageNameError
 from qa_authoring.domain.value_objects.language_code import InvalidLanguageCodeError, LanguageCode
-from tests.fakes import InMemoryLanguageRepository, InMemoryProjectRepository
+from tests.fakes import (
+    InMemoryLanguageRepository,
+    InMemoryProjectRepository,
+    InMemoryQASetRepository,
+)
 
 
 @pytest.fixture
@@ -112,7 +116,7 @@ async def test_update_missing_id_raises_not_found(repo: InMemoryLanguageReposito
 async def test_delete_removes_the_language(repo: InMemoryLanguageRepository) -> None:
     created = await RegisterLanguageHandler(repo)(RegisterLanguageCommand(code="fr", name="French"))
 
-    await DeleteLanguageHandler(repo, InMemoryProjectRepository())(
+    await DeleteLanguageHandler(repo, InMemoryProjectRepository(), InMemoryQASetRepository())(
         DeleteLanguageCommand(language_id=created.id)
     )
 
@@ -121,14 +125,14 @@ async def test_delete_removes_the_language(repo: InMemoryLanguageRepository) -> 
 
 async def test_delete_missing_id_raises_not_found(repo: InMemoryLanguageRepository) -> None:
     with pytest.raises(LanguageNotFoundError):
-        await DeleteLanguageHandler(repo, InMemoryProjectRepository())(
+        await DeleteLanguageHandler(repo, InMemoryProjectRepository(), InMemoryQASetRepository())(
             DeleteLanguageCommand(language_id=uuid4())
         )
 
 
 async def test_a_deleted_code_can_be_registered_again(repo: InMemoryLanguageRepository) -> None:
     created = await RegisterLanguageHandler(repo)(RegisterLanguageCommand(code="fr", name="French"))
-    await DeleteLanguageHandler(repo, InMemoryProjectRepository())(
+    await DeleteLanguageHandler(repo, InMemoryProjectRepository(), InMemoryQASetRepository())(
         DeleteLanguageCommand(language_id=created.id)
     )
 

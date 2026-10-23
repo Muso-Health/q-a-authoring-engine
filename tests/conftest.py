@@ -41,6 +41,15 @@ def postgres_url() -> Iterator[str]:
 
 
 REPO_SCHEMA = "qa_authoring_repo_it"
+_TABLES = (
+    "question_variants",
+    "answers",
+    "qasets",
+    "themes",
+    "protocols",
+    "projects",
+    "languages",
+)
 
 
 @pytest.fixture(scope="session")
@@ -73,5 +82,5 @@ async def migrated_engine(migrated_url: str) -> AsyncIterator[AsyncEngine]:
     factory = LocalDsnEngineFactory(database_url=migrated_url, schema=REPO_SCHEMA)
     async with factory.engine() as engine:
         async with engine.begin() as connection:
-            await connection.execute(text("TRUNCATE themes, protocols, projects, languages"))
+            await connection.execute(text(f"TRUNCATE {', '.join(_TABLES)}"))
         yield engine
