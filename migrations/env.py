@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import text
 
+import qa_authoring.infrastructure.persistence.schema.language  # noqa: F401
 from config.database import engine_factory_from_settings
 from config.settings import Settings
 from qa_authoring.infrastructure.persistence.metadata import metadata

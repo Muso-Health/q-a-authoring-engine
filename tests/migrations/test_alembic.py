@@ -48,7 +48,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0001_baseline",)]
+    assert versions == [("0002_languages",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -58,9 +58,27 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     )
     assert public_version == []
 
-    # Idempotent: a second upgrade is a no-op, and the baseline downgrades cleanly.
+    languages = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' AND table_name = 'languages' "
+            "AND constraint_type IN ('PRIMARY KEY', 'UNIQUE') ORDER BY constraint_name",
+        )
+    )
+    assert languages == [("pk_languages", "PRIMARY KEY"), ("uq_languages_code", "UNIQUE")]
+
+    # Idempotent: a second upgrade is a no-op, and every revision downgrades cleanly.
     command.upgrade(_alembic_config(), "head")
     command.downgrade(_alembic_config(), "base")
+    tables = asyncio.run(
+        _query(
+            postgres_url,
+            f"SELECT 1 FROM information_schema.tables WHERE table_schema = '{SCHEMA}' "
+            "AND table_name = 'languages'",
+        )
+    )
+    assert tables == []
     assert (
         asyncio.run(_query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")) == []
     )
