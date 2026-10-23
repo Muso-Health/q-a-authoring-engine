@@ -92,7 +92,8 @@ class QASet:
     """Aggregate root: a question/answer set within a theme, across languages.
 
     Invariants: at most one answer per language, and every question variant's language has an
-    answer. Removing a language's answer removes its variants.
+    answer. Removing a language's answer removes its variants. Answers and variants keep their
+    creation order: rehydrate them in that order.
     """
 
     __slots__ = ("_answers", "_id", "_theme_id", "_variants")
@@ -130,11 +131,11 @@ class QASet:
 
     @property
     def answers(self) -> tuple[Answer, ...]:
-        return tuple(sorted(self._answers.values(), key=lambda a: str(a.language_id)))
+        return tuple(self._answers.values())
 
     @property
     def variants(self) -> tuple[QuestionVariant, ...]:
-        return tuple(sorted(self._variants.values(), key=lambda v: str(v.id)))
+        return tuple(self._variants.values())
 
     def presences(self) -> tuple[LanguagePresence, ...]:
         return tuple(self._presence_of(answer) for answer in self.answers)

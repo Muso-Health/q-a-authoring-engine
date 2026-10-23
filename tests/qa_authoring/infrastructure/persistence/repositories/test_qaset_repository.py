@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -19,6 +20,7 @@ from qa_authoring.domain.value_objects.language_code import LanguageCode
 from qa_authoring.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -176,3 +178,35 @@ async def test_fk_rules_map_to_domain_errors(migrated_engine: AsyncEngine) -> No
     with pytest.raises(LanguageInUseError):
         async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
             await uow.languages.delete(bm)
+
+
+@pytest.mark.usefixtures("descending_uuids")
+async def test_loads_in_creation_order_across_saves(migrated_engine: AsyncEngine) -> None:
+    """Each change is its own transaction, as in the use cases, so each gets a later now().
+    Ids shrink as they are minted, so an id ordering would come out reversed."""
+    theme_id, fr, bm = await _seed(migrated_engine)
+    qaset = QASet.create(theme_id=theme_id, language_id=bm, answer_text="first language")
+    async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
+        await uow.qasets.add(qaset)
+
+    async def change(mutate: Callable[[QASet], object]) -> None:
+        async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
+            loaded = await uow.qasets.get(qaset.id)
+            assert loaded is not None
+            mutate(loaded)
+            await uow.qasets.save(loaded)
+
+    await change(lambda q: q.add_language(fr, "second language"))
+    for variant_text in ("v1", "v2", "v3"):
+        await change(partial(QASet.add_variant, language_id=bm, text=variant_text))
+    # Editing must not move anything: created_at survives a save.
+    await change(lambda q: q.update_answer(bm, "first language, edited"))
+    await change(lambda q: q.update_variant(q.presence(bm).variants[0].id, "v1 edited"))
+
+    async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
+        loaded = await uow.qasets.get(qaset.id)
+        [listed] = await uow.qasets.list_by_theme(theme_id)
+    assert loaded is not None
+    for result in (loaded, listed):
+        assert [p.language_id for p in result.presences()] == [bm, fr]
+        assert [v.text for v in result.presence(bm).variants] == ["v1 edited", "v2", "v3"]

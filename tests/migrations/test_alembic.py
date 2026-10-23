@@ -48,7 +48,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0004_qasets",)]
+    assert versions == [("0005_creation_order",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -122,6 +122,31 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_question_variants_qaset_id_language_id",),
         ("ix_themes_protocol_id",),
     ]
+
+    created_at = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT table_name, data_type, is_nullable, column_default "
+            "FROM information_schema.columns "
+            f"WHERE table_schema = '{SCHEMA}' AND column_name = 'created_at' ORDER BY table_name",
+        )
+    )
+    assert created_at == [
+        ("answers", "timestamp with time zone", "NO", "now()"),
+        ("question_variants", "timestamp with time zone", "NO", "now()"),
+    ]
+    command.downgrade(_alembic_config(), "0004_qasets")
+    assert (
+        asyncio.run(
+            _query(
+                postgres_url,
+                "SELECT 1 FROM information_schema.columns "
+                f"WHERE table_schema = '{SCHEMA}' AND column_name = 'created_at'",
+            )
+        )
+        == []
+    )
+    command.upgrade(_alembic_config(), "head")
 
     # Idempotent: a second upgrade is a no-op, and every revision downgrades cleanly.
     command.upgrade(_alembic_config(), "head")

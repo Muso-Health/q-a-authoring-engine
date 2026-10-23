@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     Column,
+    DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -10,6 +11,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    func,
 )
 
 from qa_authoring.infrastructure.persistence.metadata import metadata
@@ -37,6 +39,7 @@ answers = Table(
         index=True,
     ),
     Column("text", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
     PrimaryKeyConstraint("id"),
     UniqueConstraint("qaset_id", "language_id"),
 )
@@ -54,6 +57,7 @@ question_variants = Table(
         index=True,
     ),
     Column("text", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
     PrimaryKeyConstraint("id"),
     # A variant's language must have an answer in the same QA set; removing it removes them.
     ForeignKeyConstraint(

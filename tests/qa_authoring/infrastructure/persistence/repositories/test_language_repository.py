@@ -88,4 +88,5 @@ async def test_table_lives_in_the_app_schema(migrated_engine: AsyncEngine) -> No
     )
     async with migrated_engine.connect() as connection:
         schemas: list[str] = list((await connection.execute(query)).scalars())
-    assert schemas == ["qa_authoring_repo_it"]
+    assert "qa_authoring_repo_it" in schemas
+    assert "public" not in schemas

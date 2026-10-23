@@ -231,6 +231,23 @@ def test_update_answer_validation(client: TestClient, setup: tuple[str, str, str
 # --- variants ---
 
 
+@pytest.mark.usefixtures("descending_uuids")
+def test_get_lists_languages_and_variants_in_creation_order(
+    client: TestClient, setup: tuple[str, str, str]
+) -> None:
+    _, fr, qaset_id = setup
+    bm = _language(client, "bm")
+    _ok(client.post(f"/qasets/{qaset_id}/languages", json={"language_id": bm, "answer_text": "b"}))
+    texts = ["first", "second", "third"]
+    for text in texts:
+        _ok(client.post(f"/qasets/{qaset_id}/languages/{fr}/variants", json={"text": text}))
+
+    body = _ok(client.get(f"/qasets/{qaset_id}"), 200)
+
+    assert [p["language_id"] for p in body["languages"]] == [fr, bm]
+    assert [v["text"] for v in _presence(body, fr)["variants"]] == texts
+
+
 def test_variant_lifecycle(client: TestClient, setup: tuple[str, str, str]) -> None:
     _, fr, qaset_id = setup
 

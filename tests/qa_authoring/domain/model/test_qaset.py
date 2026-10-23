@@ -120,10 +120,21 @@ def test_theme_is_immutable() -> None:
         qaset.theme_id = uuid4()  # type: ignore[misc]
 
 
-def test_presences_are_ordered_deterministically() -> None:
+@pytest.mark.usefixtures("descending_uuids")
+def test_presences_and_variants_keep_creation_order() -> None:
+    # FR > BM as UUIDs and every new id is smaller than the last: creation order must win.
     qaset = QASet.create(theme_id=uuid4(), language_id=FR, answer_text="a")
     qaset.add_language(BM, "b")
-    assert [p.language_id for p in qaset.presences()] == sorted([FR, BM], key=str)
+    texts = [f"q{i}" for i in range(5)]
+    for text in texts:
+        qaset.add_variant(FR, text)
+
+    assert [p.language_id for p in qaset.presences()] == [FR, BM]
+    assert [v.text for v in qaset.presence(FR).variants] == texts
+    qaset.update_answer(FR, "edited")
+    qaset.update_variant(qaset.presence(FR).variants[0].id, "q0 edited")
+    assert [p.language_id for p in qaset.presences()] == [FR, BM]
+    assert [v.text for v in qaset.presence(FR).variants][1:] == texts[1:]
 
 
 def test_rehydrate_rejects_a_variant_without_presence() -> None:

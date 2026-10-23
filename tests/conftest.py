@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import itertools
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
@@ -13,6 +15,17 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
 
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+@pytest.fixture
+def descending_uuids(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the QASet aggregate mint ever-smaller UUIDs, so UUID order is the reverse of creation
+    order: anything that sorts by id instead of creation order fails."""
+    counter = itertools.count()
+    monkeypatch.setattr(
+        "qa_authoring.domain.model.qaset.uuid4",
+        lambda: UUID(int=(1 << 127) - next(counter)),
+    )
 
 
 @pytest.fixture(scope="session")
