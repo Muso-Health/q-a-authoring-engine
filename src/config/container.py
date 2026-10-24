@@ -28,6 +28,7 @@ from qa_authoring.application.delete_role.handler import DeleteRoleHandler
 from qa_authoring.application.delete_theme.handler import DeleteThemeHandler
 from qa_authoring.application.delete_variant_audio.handler import DeleteVariantAudioHandler
 from qa_authoring.application.detach_intent.handler import DetachIntentHandler
+from qa_authoring.application.generate_variants.handler import GenerateVariantsHandler
 from qa_authoring.application.get_audio.handler import GetAudioHandler
 from qa_authoring.application.get_audio_playback_url.handler import GetAudioPlaybackUrlHandler
 from qa_authoring.application.get_audio_validation.handler import GetAudioValidationHandler
@@ -90,6 +91,10 @@ from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 from qa_authoring.application.update_user.handler import UpdateUserHandler
 from qa_authoring.application.validation_reset import ValidationResetter
 from qa_authoring.application.validation_support import BaseLanguageResolver, DecisionRecorder
+from qa_authoring.infrastructure.generation.llm_variant_generator import (
+    LlmVariantGenerator,
+    UnavailableVariantGenerator,
+)
 from qa_authoring.infrastructure.translation.llm_translator import LlmTranslator
 
 if TYPE_CHECKING:
@@ -102,6 +107,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.prompt_templates import PromptTemplatePort
     from qa_authoring.application.ports.translator import TranslatorPort
     from qa_authoring.application.ports.unit_of_work import UnitOfWork
+    from qa_authoring.application.ports.variant_generator import VariantGeneratorPort
 
 
 class Container:
@@ -162,6 +168,11 @@ class Container:
         if self._google_translator is not None:
             engines[TranslationEngine.GOOGLE] = self._google_translator
         return Translators(engines)
+
+    def _variant_generator(self, uow: UnitOfWork) -> VariantGeneratorPort:
+        if self._llm is None:
+            return UnavailableVariantGenerator()
+        return LlmVariantGenerator(self.prompt_templates(uow), self._llm)
 
     def _recorder(self, uow: UnitOfWork) -> DecisionRecorder:
         return DecisionRecorder(uow.validations, uow.users, self._clock)
@@ -428,3 +439,6 @@ class Container:
             self._views(uow),
             self._resetter(uow),
         )
+
+    def build_generate_variants(self, uow: UnitOfWork) -> GenerateVariantsHandler:
+        return GenerateVariantsHandler(uow.qasets, uow.languages, self._variant_generator(uow))

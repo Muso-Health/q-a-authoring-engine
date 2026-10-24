@@ -443,6 +443,17 @@ class FakeGoogleTranslator:
         return f"{target.code.value}: {text}"
 
 
+class FakeVariantGenerator:
+    """Proposes two numbered questions per answer, naming the language it was asked for."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def generate(self, answer: str, context: str, language: Language) -> tuple[str, ...]:
+        self.calls.append((answer, context, language.code.value))
+        return tuple(f"{answer} ({language.name}) #{n}" for n in (1, 2))
+
+
 AUDIO_POLICY = AudioPolicy(
     max_upload_bytes=64,
     allowed_mime_types=frozenset({"audio/webm", "audio/ogg", "audio/wav"}),

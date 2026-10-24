@@ -26,6 +26,7 @@ from qa_authoring.application.ports.translator import (
     TranslationEngineError,
     UnsupportedLanguageForEngineError,
 )
+from qa_authoring.application.ports.variant_generator import GenerationEngineError
 from qa_authoring.application.project_errors import (
     ProjectHasProtocolsError,
     ProjectNotFoundError,
@@ -113,6 +114,7 @@ _RULES: dict[type[Exception], _Rule] = {
     UnknownEngineError: _Rule(422, "unknown_engine"),
     UnsupportedLanguageForEngineError: _Rule(422, "unsupported_language_for_engine"),
     TranslationEngineError: _Rule(502, "translation_engine_error"),
+    GenerationEngineError: _Rule(502, "generation_engine_error"),
     InvalidPromptTemplateError: _Rule(422, "invalid_prompt_template", _prompt_template_details),
     UnknownPermissionError: _Rule(422, "unknown_permission"),
     InvalidEmailError: _Rule(422, "invalid_email"),

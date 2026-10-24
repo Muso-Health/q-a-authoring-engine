@@ -10,6 +10,7 @@ from apps.api.errors import register_error_handlers
 from apps.api.routers.access import router as access_router
 from apps.api.routers.audio import router as audio_router
 from apps.api.routers.categories import router as categories_router
+from apps.api.routers.generation import router as generation_router
 from apps.api.routers.health import router as health_router
 from apps.api.routers.intents import router as intents_router
 from apps.api.routers.languages import router as languages_router
@@ -81,6 +82,7 @@ def create_app(
         validations_router,
         prompt_templates_router,
         translation_router,
+        generation_router,
     ):
         app.include_router(router, dependencies=[Depends(require_authenticated)])
     return app
