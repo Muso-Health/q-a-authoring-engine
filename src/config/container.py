@@ -32,6 +32,7 @@ from qa_authoring.application.delete_role.handler import DeleteRoleHandler
 from qa_authoring.application.delete_theme.handler import DeleteThemeHandler
 from qa_authoring.application.delete_variant_audio.handler import DeleteVariantAudioHandler
 from qa_authoring.application.detach_intent.handler import DetachIntentHandler
+from qa_authoring.application.export_project_corpus.handler import ExportProjectCorpusHandler
 from qa_authoring.application.generate_variants.handler import GenerateVariantsHandler
 from qa_authoring.application.get_audio.handler import GetAudioHandler
 from qa_authoring.application.get_audio_playback_url.handler import GetAudioPlaybackUrlHandler
@@ -104,6 +105,7 @@ from qa_authoring.infrastructure.completeness.llm_completeness_analyzer import (
     LlmCompletenessAnalyzer,
     UnavailableCompletenessAnalyzer,
 )
+from qa_authoring.infrastructure.export.parquet_exporter import ParquetCorpusExporter
 from qa_authoring.infrastructure.extraction.text_extractor import TextDocumentExtractor
 from qa_authoring.infrastructure.generation.llm_variant_generator import (
     LlmVariantGenerator,
@@ -120,6 +122,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.audio_storage import AudioStoragePort
     from qa_authoring.application.ports.completeness_analyzer import CompletenessAnalyzerPort
     from qa_authoring.application.ports.document_storage import DocumentStoragePort
+    from qa_authoring.application.ports.export_storage import ExportStoragePort
     from qa_authoring.application.ports.llm import LlmPort
     from qa_authoring.application.ports.prompt_templates import PromptTemplatePort
     from qa_authoring.application.ports.translator import TranslatorPort
@@ -147,10 +150,14 @@ class Container:
         google_translator: TranslatorPort | None = None,
         documentation_storage: DocumentStoragePort | None = None,
         documentation_policy: DocumentationPolicy | None = None,
+        export_storage: ExportStoragePort | None = None,
+        export_url_ttl_seconds: int = 900,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._documentation_storage = documentation_storage
         self._documentation_policy = documentation_policy
+        self._export_storage = export_storage
+        self._export_url_ttl_seconds = export_url_ttl_seconds
         self._llm = llm
         self._google_translator = google_translator
         self._audio_storage = audio_storage
@@ -203,6 +210,10 @@ class Container:
     def _document_storage(self) -> DocumentStoragePort:
         assert self._documentation_storage is not None, "documentation is not configured"
         return self._documentation_storage
+
+    def _export_storage_port(self) -> ExportStoragePort:
+        assert self._export_storage is not None, "exports are not configured"
+        return self._export_storage
 
     def _completeness_analyzer(self, uow: UnitOfWork) -> CompletenessAnalyzerPort:
         if self._llm is None:
@@ -514,4 +525,21 @@ class Container:
             uow.qasets,
             TextDocumentExtractor(self._document_storage()),
             self._completeness_analyzer(uow),
+        )
+
+    def build_export_project_corpus(self, uow: UnitOfWork) -> ExportProjectCorpusHandler:
+        storage = self._export_storage_port()
+        return ExportProjectCorpusHandler(
+            uow.projects,
+            uow.protocols,
+            uow.themes,
+            uow.qasets,
+            uow.languages,
+            uow.intents,
+            uow.categories,
+            uow.validations,
+            ParquetCorpusExporter(storage),
+            storage,
+            self._export_url_ttl_seconds,
+            self._clock,
         )

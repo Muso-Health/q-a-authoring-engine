@@ -21,6 +21,7 @@ class Permission(StrEnum):
     VALIDATE_AUDIO = "validate_audio"
     MANAGE_ACCESS = "manage_access"
     MANAGE_PROMPTS = "manage_prompts"
+    EXPORT_CORPUS = "export_corpus"
 
 
 class UnknownPermissionError(ValueError):

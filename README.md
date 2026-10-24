@@ -70,6 +70,11 @@ file (git-ignored). Every variable has a development default.
 | `QA_AUTHORING_DOCUMENTATION_DOWNLOAD_URL_TTL_SECONDS` | `900` | Lifetime of signed download URLs. |
 | `QA_AUTHORING_DOCUMENTATION_MAX_UPLOAD_BYTES` | `104857600` | Largest accepted document (100 MiB). |
 | `QA_AUTHORING_DOCUMENTATION_ALLOWED_MIME_TYPES` | PDF, Word (docx), plain text, mp4/webm/quicktime video, png/jpeg/webp images | Comma-separated whitelist of document types. |
+| `QA_AUTHORING_EXPORT_STORAGE_BACKEND` | `local` | Where Parquet corpus exports are stored: `local` or `gcs`. |
+| `QA_AUTHORING_EXPORT_BUCKET` | *(empty)* | GCS bucket for exports. Required with `gcs`. |
+| `QA_AUTHORING_EXPORT_OBJECT_PREFIX` | `exports/` | Object key prefix (keys end with the file's SHA-256). |
+| `QA_AUTHORING_EXPORT_LOCAL_DIRECTORY` | `.export-storage` | Directory for the `local` backend (git-ignored). |
+| `QA_AUTHORING_EXPORT_DOWNLOAD_URL_TTL_SECONDS` | `900` | Lifetime of the signed export download URLs. |
 | `QA_AUTHORING_AUTH_PROVIDER` | `entra` | How callers are identified: `entra` (a Microsoft Entra ID bearer token in `Authorization`) or `dev` (a plain `X-Dev-User: <email>` header; **local development only**, as anyone can claim any identity with it). |
 | `QA_AUTHORING_AUTH_ENTRA_TENANT` | *(empty)* | The Entra tenant (directory) id. Tokens must be v2 tokens issued by `https://login.microsoftonline.com/<tenant>/v2.0`; signing keys come from that tenant's JWKS. Required with `entra`. |
 | `QA_AUTHORING_AUTH_ENTRA_AUDIENCE` | *(empty)* | The token audience: the API's app registration client id (or its application ID URI). Required with `entra`; the API refuses to start without it. |

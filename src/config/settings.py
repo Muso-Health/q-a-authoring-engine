@@ -69,6 +69,14 @@ class Settings(BaseSettings):
         "text/plain,video/mp4,video/webm,video/quicktime,image/png,image/jpeg,image/webp"
     )
 
+    # Corpus exports (Parquet), stored like audio: "local" (filesystem) or "gcs"
+    # (``export_bucket``), keyed by ``export_object_prefix`` + the content sha256.
+    export_storage_backend: str = "local"
+    export_bucket: str = ""
+    export_object_prefix: str = "exports/"
+    export_local_directory: str = ".export-storage"
+    export_download_url_ttl_seconds: int = 900
+
     # Authentication. "entra" validates Microsoft Entra ID bearer tokens issued by
     # ``auth_entra_tenant`` for ``auth_entra_audience`` (both required then); "dev" trusts a plain
     # X-Dev-User header and must never face the internet. ``bootstrap_admin_email``, when set, is
@@ -111,6 +119,13 @@ class Settings(BaseSettings):
     def _known_documentation_backend(cls, value: str) -> str:
         if value not in {"local", "gcs"}:
             raise ValueError("documentation_storage_backend must be 'local' or 'gcs'")
+        return value
+
+    @field_validator("export_storage_backend")
+    @classmethod
+    def _known_export_backend(cls, value: str) -> str:
+        if value not in {"local", "gcs"}:
+            raise ValueError("export_storage_backend must be 'local' or 'gcs'")
         return value
 
     @property

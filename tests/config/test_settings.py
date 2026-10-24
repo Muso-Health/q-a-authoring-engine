@@ -194,3 +194,23 @@ def test_documentation_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.documentation_mime_types == frozenset({"application/pdf", "image/png"})
     with pytest.raises(ValidationError):
         _settings(monkeypatch, DOCUMENTATION_STORAGE_BACKEND="s3")
+
+
+def test_export_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    defaults = _settings(monkeypatch)
+    assert (defaults.export_storage_backend, defaults.export_object_prefix) == ("local", "exports/")
+    assert defaults.export_download_url_ttl_seconds == 900
+    settings = _settings(
+        monkeypatch,
+        EXPORT_STORAGE_BACKEND="gcs",
+        EXPORT_BUCKET="qa-exports",
+        EXPORT_OBJECT_PREFIX="corpus/",
+        EXPORT_DOWNLOAD_URL_TTL_SECONDS="120",
+    )
+    assert (
+        settings.export_bucket,
+        settings.export_object_prefix,
+        settings.export_download_url_ttl_seconds,
+    ) == ("qa-exports", "corpus/", 120)
+    with pytest.raises(ValidationError):
+        _settings(monkeypatch, EXPORT_STORAGE_BACKEND="s3")

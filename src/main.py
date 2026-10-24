@@ -17,6 +17,7 @@ from config.documentation import (
     documentation_policy_from_settings,
     documentation_storage_from_settings,
 )
+from config.export import export_storage_from_settings
 from config.llm import google_translator_from_settings, llm_from_settings
 from config.settings import Settings
 from qa_authoring.application.bootstrap_admin.command import BootstrapAdminCommand
@@ -41,6 +42,7 @@ _llm = llm_from_settings(_settings)
 _google_translator = google_translator_from_settings(_settings)
 _documentation_storage = documentation_storage_from_settings(_settings)
 _documentation_policy = documentation_policy_from_settings(_settings)
+_export_storage = export_storage_from_settings(_settings)
 
 
 @asynccontextmanager
@@ -55,6 +57,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             google_translator=_google_translator,
             documentation_storage=_documentation_storage,
             documentation_policy=_documentation_policy,
+            export_storage=_export_storage,
+            export_url_ttl_seconds=_settings.export_download_url_ttl_seconds,
         )
         await container.run(container.build_seed_prompt_templates, SeedPromptTemplatesCommand())
         if _settings.bootstrap_admin_email:

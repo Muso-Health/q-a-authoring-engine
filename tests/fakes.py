@@ -13,6 +13,7 @@ from config.container import Container
 from qa_authoring.application.audio_policy import AudioPolicy
 from qa_authoring.application.documentation_policy import DocumentationPolicy
 from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAudioError
+from qa_authoring.application.ports.corpus_export import CorpusArtifacts
 from qa_authoring.application.ports.llm import LlmUnavailableError
 from qa_authoring.application.ports.translator import (
     TranslationEngineError,
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from types import TracebackType
     from uuid import UUID
 
+    from qa_authoring.application.corpus_datasets import CorpusDatasets
     from qa_authoring.application.ports.category_repository import CategoryRepository
     from qa_authoring.application.ports.documentation_repository import (
         DocumentationRepository,
@@ -507,6 +509,21 @@ class FakeExtractor:
         return f"text of {documentation.filename}"
 
 
+class FakeExporter:
+    """Records the datasets; each artifact is named after its dataset."""
+
+    def __init__(self, prefix: str = "exports") -> None:
+        self.prefix = prefix
+        self.calls: list[CorpusDatasets] = []
+
+    async def export(self, datasets: CorpusDatasets) -> CorpusArtifacts:
+        self.calls.append(datasets)
+        return CorpusArtifacts(
+            qa_rows=f"memory://{self.prefix}/qa_rows",
+            translation_links=f"memory://{self.prefix}/translation_links",
+        )
+
+
 AUDIO_POLICY = AudioPolicy(
     max_upload_bytes=64,
     allowed_mime_types=frozenset({"audio/webm", "audio/ogg", "audio/wav"}),
@@ -519,6 +536,7 @@ DOCUMENTATION_POLICY = DocumentationPolicy(
     allowed_mime_types=frozenset({"application/pdf", DOCX, "text/plain", "video/mp4", "image/png"}),
     download_url_ttl_seconds=600,
 )
+EXPORT_URL_TTL_SECONDS = 900
 
 
 @dataclass
@@ -543,6 +561,9 @@ class InMemoryStore:
     )
     documentation_storage: InMemoryBlobStorage = field(
         default_factory=lambda: InMemoryBlobStorage("documentation")
+    )
+    export_storage: InMemoryBlobStorage = field(
+        default_factory=lambda: InMemoryBlobStorage("exports")
     )
     llm: FakeLlm = field(default_factory=FakeLlm)
     google_translator: FakeGoogleTranslator = field(default_factory=FakeGoogleTranslator)
@@ -619,6 +640,8 @@ def in_memory_container() -> tuple[Container, InMemoryStore]:
         google_translator=store.google_translator,
         documentation_storage=store.documentation_storage,
         documentation_policy=DOCUMENTATION_POLICY,
+        export_storage=store.export_storage,
+        export_url_ttl_seconds=EXPORT_URL_TTL_SECONDS,
     )
     return container, store
 

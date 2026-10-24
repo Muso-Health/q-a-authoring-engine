@@ -21,6 +21,7 @@ from qa_authoring.application.documentation_errors import (
     DocumentTooLargeError,
     UnsupportedDocumentTypeError,
 )
+from qa_authoring.application.export_errors import NothingToExportError
 from qa_authoring.application.intent_errors import IntentInUseError, IntentNotFoundError
 from qa_authoring.application.language_errors import (
     LanguageCodeAlreadyExistsError,
@@ -114,6 +115,7 @@ _RULES: dict[type[Exception], _Rule] = {
     PromptTemplateNotFoundError: _Rule(404, "prompt_template_not_found"),
     DocumentationNotFoundError: _Rule(404, "documentation_not_found"),
     NoDocumentationError: _Rule(409, "no_documentation"),
+    NothingToExportError: _Rule(409, "nothing_to_export"),
     UnsupportedDocumentTypeError: _Rule(422, "unsupported_document_type"),
     DocumentTooLargeError: _Rule(422, "document_too_large"),
     CompletenessEngineError: _Rule(502, "completeness_engine_error"),
