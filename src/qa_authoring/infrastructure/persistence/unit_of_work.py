@@ -3,6 +3,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Self
 
+from qa_authoring.infrastructure.persistence.queries.validation_queues import (
+    PostgresValidationQueues,
+)
 from qa_authoring.infrastructure.persistence.repositories.category import (
     PostgresCategoryRepository,
 )
@@ -49,6 +52,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.application.ports.user_repository import UserRepository
+    from qa_authoring.application.ports.validation_queues import ValidationQueuesPort
     from qa_authoring.application.ports.validation_repository import ValidationRepository
 
 _log = logging.getLogger(__name__)
@@ -70,6 +74,7 @@ class SqlAlchemyUnitOfWork:
     validations: ValidationRepository
     prompt_templates: PromptTemplateRepository
     documentation: DocumentationRepository
+    validation_queues: ValidationQueuesPort
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -95,6 +100,7 @@ class SqlAlchemyUnitOfWork:
         self.validations = PostgresValidationRepository(self._connection)
         self.prompt_templates = PostgresPromptTemplateRepository(self._connection)
         self.documentation = PostgresDocumentationRepository(self._connection)
+        self.validation_queues = PostgresValidationQueues(self._connection)
         return self
 
     async def __aexit__(

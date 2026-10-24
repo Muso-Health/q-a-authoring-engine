@@ -4,7 +4,7 @@ import hashlib
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from fastapi.testclient import TestClient
 
@@ -22,6 +22,7 @@ from qa_authoring.application.ports.translator import (
 from qa_authoring.application.qaset_views import QASetViews
 from qa_authoring.application.role_errors import RoleInUseError, RoleNameExistsError
 from qa_authoring.application.user_errors import EmailAlreadyExistsError
+from qa_authoring.application.validation_queues import QueuePage
 from qa_authoring.application.validation_reset import ValidationResetter
 from qa_authoring.application.validation_support import BaseLanguageResolver
 from qa_authoring.domain.model.intent import normalize_intent_text
@@ -52,7 +53,14 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.application.ports.user_repository import UserRepository
+    from qa_authoring.application.ports.validation_queues import ValidationQueuesPort
     from qa_authoring.application.ports.validation_repository import ValidationRepository
+    from qa_authoring.application.validation_queues import (
+        AudioQueueItem,
+        ClinicalQueueItem,
+        QueueFilter,
+        TranslationQueueItem,
+    )
     from qa_authoring.domain.model.category import Category
     from qa_authoring.domain.model.documentation import Documentation
     from qa_authoring.domain.model.intent import Intent
@@ -509,6 +517,27 @@ class FakeExtractor:
         return f"text of {documentation.filename}"
 
 
+class FakeValidationQueues:
+    """Answers each queue with a canned page (empty by default) and records the filters."""
+
+    def __init__(self) -> None:
+        self.pages: dict[str, QueuePage[Any]] = {}
+        self.calls: list[tuple[str, QueueFilter]] = []
+
+    def _page(self, queue: str, queue_filter: QueueFilter) -> QueuePage[Any]:
+        self.calls.append((queue, queue_filter))
+        return self.pages.get(queue, QueuePage((), None, 0))
+
+    async def clinical(self, queue_filter: QueueFilter) -> QueuePage[ClinicalQueueItem]:
+        return self._page("clinical", queue_filter)
+
+    async def translation(self, queue_filter: QueueFilter) -> QueuePage[TranslationQueueItem]:
+        return self._page("translation", queue_filter)
+
+    async def audio(self, queue_filter: QueueFilter) -> QueuePage[AudioQueueItem]:
+        return self._page("audio", queue_filter)
+
+
 class FakeExporter:
     """Records the datasets; each artifact is named after its dataset."""
 
@@ -565,6 +594,7 @@ class InMemoryStore:
     export_storage: InMemoryBlobStorage = field(
         default_factory=lambda: InMemoryBlobStorage("exports")
     )
+    validation_queues: FakeValidationQueues = field(default_factory=FakeValidationQueues)
     llm: FakeLlm = field(default_factory=FakeLlm)
     google_translator: FakeGoogleTranslator = field(default_factory=FakeGoogleTranslator)
     events: list[str] = field(default_factory=list)
@@ -591,6 +621,7 @@ class InMemoryUnitOfWork:
     validations: ValidationRepository
     prompt_templates: PromptTemplateRepository
     documentation: DocumentationRepository
+    validation_queues: ValidationQueuesPort
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -605,6 +636,7 @@ class InMemoryUnitOfWork:
         self.validations = store.validations
         self.prompt_templates = store.prompt_templates
         self.documentation = store.documentation
+        self.validation_queues = store.validation_queues
         self._events = store.events
         self._after_commit: list[Callable[[], Awaitable[None]]] = []
 

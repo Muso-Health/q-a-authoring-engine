@@ -63,6 +63,7 @@ from qa_authoring.application.validation_errors import (
     NoBaseLanguagePresenceError,
     NotATranslationError,
 )
+from qa_authoring.application.validation_queues import InvalidQueueFilterError
 from qa_authoring.domain.model.language import InvalidLanguageNameError
 from qa_authoring.domain.model.permission import UnknownPermissionError
 from qa_authoring.domain.model.prompt_template import InvalidPromptTemplateError
@@ -125,6 +126,7 @@ _RULES: dict[type[Exception], _Rule] = {
     NoBaseLanguagePresenceError: _Rule(409, "no_base_language_presence"),
     NotATranslationError: _Rule(422, "not_a_translation"),
     InvalidDecisionError: _Rule(422, "invalid_decision"),
+    InvalidQueueFilterError: _Rule(422, "invalid_queue_filter"),
     UnknownEngineError: _Rule(422, "unknown_engine"),
     UnsupportedLanguageForEngineError: _Rule(422, "unsupported_language_for_engine"),
     TranslationEngineError: _Rule(502, "translation_engine_error"),

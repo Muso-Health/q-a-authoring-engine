@@ -67,6 +67,11 @@ from qa_authoring.application.list_qasets.handler import ListQASetsHandler
 from qa_authoring.application.list_roles.handler import ListRolesHandler
 from qa_authoring.application.list_themes.handler import ListThemesHandler
 from qa_authoring.application.list_users.handler import ListUsersHandler
+from qa_authoring.application.list_validation_queues.handler import (
+    ListAudioQueueHandler,
+    ListClinicalQueueHandler,
+    ListTranslationQueueHandler,
+)
 from qa_authoring.application.prompt_templates import PromptRenderer
 from qa_authoring.application.qaset_views import QASetViews
 from qa_authoring.application.record_audio_decision.handler import RecordAudioDecisionHandler
@@ -543,3 +548,12 @@ class Container:
             self._export_url_ttl_seconds,
             self._clock,
         )
+
+    def build_list_clinical_queue(self, uow: UnitOfWork) -> ListClinicalQueueHandler:
+        return ListClinicalQueueHandler(uow.validation_queues)
+
+    def build_list_translation_queue(self, uow: UnitOfWork) -> ListTranslationQueueHandler:
+        return ListTranslationQueueHandler(uow.validation_queues)
+
+    def build_list_audio_queue(self, uow: UnitOfWork) -> ListAudioQueueHandler:
+        return ListAudioQueueHandler(uow.validation_queues)
