@@ -21,6 +21,8 @@ dependencies = [
     "asyncpg",
     "alembic",
     "cloud-sql-python-connector[asyncpg]",
+    "python-multipart",
+    "google-cloud-storage",
 ]
 
 [project.optional-dependencies]
@@ -71,6 +73,8 @@ exclude = ["^migrations/"]
 module = [
     "testcontainers.*",
     "google.cloud.sql.*",
+    "google.cloud.storage.*",
+    "google.cloud.exceptions",
 ]
 ignore_missing_imports = true
 

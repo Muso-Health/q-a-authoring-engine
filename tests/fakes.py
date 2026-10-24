@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Self
 
 from config.container import Container
+from qa_authoring.application.audio_policy import AudioPolicy
+from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAudioError
 from qa_authoring.domain.model.intent import normalize_intent_text
 from qa_authoring.domain.value_objects.naming import normalize_key
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from types import TracebackType
     from uuid import UUID
 
@@ -24,7 +29,7 @@ if TYPE_CHECKING:
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
     from qa_authoring.domain.model.protocol import Protocol
-    from qa_authoring.domain.model.qaset import QASet
+    from qa_authoring.domain.model.qaset import AudioReference, QASet
     from qa_authoring.domain.model.theme import Theme
     from qa_authoring.domain.value_objects.language_code import LanguageCode
 
@@ -128,6 +133,8 @@ class InMemoryQASetRepository:
 
     def __init__(self) -> None:
         self.rows: dict[UUID, QASet] = {}
+        self.events: list[str] = []
+        self.fail_next_save = False
 
     async def add(self, qaset: QASet) -> None:
         self.rows[qaset.id] = deepcopy(qaset)
@@ -141,7 +148,17 @@ class InMemoryQASetRepository:
         return tuple(deepcopy(row) for row in sorted(rows, key=lambda row: str(row.id)))
 
     async def save(self, qaset: QASet) -> None:
+        if self.fail_next_save:
+            self.fail_next_save = False
+            raise RuntimeError("database unavailable")
+        self.events.append("save")
         self.rows[qaset.id] = deepcopy(qaset)
+
+    async def find_audio(self, audio_id: UUID) -> AudioReference | None:
+        return next((r for row in self.rows.values() if (r := row.find_audio(audio_id))), None)
+
+    async def storage_uri_in_use(self, storage_uri: str) -> bool:
+        return any(a.storage_uri == storage_uri for row in self.rows.values() for a in row.audios)
 
     async def delete(self, qaset_id: UUID) -> None:
         self.rows.pop(qaset_id, None)
@@ -213,6 +230,46 @@ class InMemoryCategoryRepository:
         self.rows.pop(category_id, None)
 
 
+class InMemoryAudioStorage:
+    def __init__(self) -> None:
+        self.blobs: dict[str, bytes] = {}
+        self.events: list[str] = []
+
+    async def store(self, content: bytes, mime_type: str) -> str:
+        uri = f"memory://audio/{hashlib.sha256(content).hexdigest()}"
+        self.events.append(f"store {uri}")
+        self.blobs[uri] = content
+        return uri
+
+    async def delete(self, storage_uri: str) -> None:
+        self.events.append(f"delete {storage_uri}")
+        self.blobs.pop(storage_uri, None)
+
+    async def signed_url(self, storage_uri: str, ttl_seconds: int) -> str:
+        return f"https://signed.example/{storage_uri.removeprefix('memory://')}?ttl={ttl_seconds}"
+
+
+class FakeAudioProbe:
+    """Content starting with ``junk`` is unreadable; anything else probes as configured."""
+
+    def __init__(self) -> None:
+        self.duration_ms = 1500
+        self.mime_type = "audio/webm"
+
+    async def probe(self, content: bytes) -> ProbedAudio:
+        if content.startswith(b"junk"):
+            raise UnreadableAudioError("not an audio file")
+        return ProbedAudio(duration_ms=self.duration_ms, mime_type=self.mime_type)
+
+
+AUDIO_POLICY = AudioPolicy(
+    max_upload_bytes=64,
+    allowed_mime_types=frozenset({"audio/webm", "audio/ogg", "audio/wav"}),
+    playback_url_ttl_seconds=300,
+)
+NOW = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
+
+
 @dataclass
 class InMemoryStore:
     languages: InMemoryLanguageRepository = field(default_factory=InMemoryLanguageRepository)
@@ -222,6 +279,14 @@ class InMemoryStore:
     qasets: InMemoryQASetRepository = field(default_factory=InMemoryQASetRepository)
     intents: InMemoryIntentRepository = field(default_factory=InMemoryIntentRepository)
     categories: InMemoryCategoryRepository = field(default_factory=InMemoryCategoryRepository)
+    audio_storage: InMemoryAudioStorage = field(default_factory=InMemoryAudioStorage)
+    audio_probe: FakeAudioProbe = field(default_factory=FakeAudioProbe)
+    events: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # One timeline across storage, repository and commits, to assert their ordering.
+        self.qasets.events = self.events
+        self.audio_storage.events = self.events
 
 
 class InMemoryUnitOfWork:
@@ -241,6 +306,11 @@ class InMemoryUnitOfWork:
         self.qasets = store.qasets
         self.intents = store.intents
         self.categories = store.categories
+        self._events = store.events
+        self._after_commit: list[Callable[[], Awaitable[None]]] = []
+
+    def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
+        self._after_commit.append(action)
 
     async def __aenter__(self) -> Self:
         return self
@@ -251,9 +321,21 @@ class InMemoryUnitOfWork:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        return None
+        if exc_type is not None:
+            self._events.append("rollback")
+            return
+        self._events.append("commit")
+        for action in self._after_commit:
+            await action()
 
 
 def in_memory_container() -> tuple[Container, InMemoryStore]:
     store = InMemoryStore()
-    return Container(lambda: InMemoryUnitOfWork(store)), store
+    container = Container(
+        lambda: InMemoryUnitOfWork(store),
+        audio_storage=store.audio_storage,
+        audio_probe=store.audio_probe,
+        audio_policy=AUDIO_POLICY,
+        clock=lambda: NOW,
+    )
+    return container, store

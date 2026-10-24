@@ -17,12 +17,19 @@ architecture.
 - **Alembic** for schema migrations
 - **pydantic-settings** for environment-driven configuration
 - **Cloud SQL Python Connector**, optional, for Google Cloud SQL deployments
+- **Google Cloud Storage** for audio recordings (the database keeps only references)
+- **ffmpeg** (`ffprobe`) to read the duration and type of uploaded recordings
 - **pytest**, **httpx** (`TestClient`) and **testcontainers** for tests; **ruff** for linting and
   formatting; **mypy** (strict) for type checking
 
 ## Getting started
 
 ### 1. Create a virtual environment and install dependencies
+
+Audio uploads need **ffmpeg** on the machine running the API, as `ffprobe` is used to
+read each recording's duration and container (browser MediaRecorder webm/opus and ogg/opus,
+as well as wav, mp3 and m4a). Install it with your package manager, for example
+`sudo apt install ffmpeg` or `brew install ffmpeg`. The Docker image already includes it.
 
 ```bash
 python3.12 -m venv .venv
@@ -48,6 +55,14 @@ file (git-ignored). Every variable has a development default.
 | `QA_AUTHORING_DB_NAME` | `qa_authoring` | Database name (Cloud SQL connector only). |
 | `QA_AUTHORING_DB_IP_TYPE` | `public` | `public` or `private` Cloud SQL IP (Cloud SQL connector only). |
 | `QA_AUTHORING_CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated browser origins allowed to call the API (e.g. `http://localhost:4200`). Empty disables CORS. |
+| `QA_AUTHORING_AUDIO_STORAGE_BACKEND` | `local` | Where recordings are stored: `local` (filesystem, for development) or `gcs` (Google Cloud Storage). |
+| `QA_AUTHORING_AUDIO_BUCKET` | *(empty)* | GCS bucket for recordings. Required when the backend is `gcs`. |
+| `QA_AUTHORING_AUDIO_OBJECT_PREFIX` | `audio/` | Object key prefix. Keys are this prefix plus the recording's SHA-256, so identical uploads share one object. |
+| `QA_AUTHORING_AUDIO_LOCAL_DIRECTORY` | `.audio-storage` | Directory for the `local` backend (git-ignored). |
+| `QA_AUTHORING_AUDIO_PLAYBACK_URL_TTL_SECONDS` | `900` | Lifetime of the signed playback URLs. |
+| `QA_AUTHORING_AUDIO_MAX_UPLOAD_BYTES` | `10485760` | Largest accepted upload (10 MiB). |
+| `QA_AUTHORING_AUDIO_ALLOWED_MIME_TYPES` | `audio/webm,audio/ogg,audio/wav,audio/mpeg,audio/mp4` | Comma-separated whitelist, checked against the type detected from the bytes (not the type the client claims). |
+| `QA_AUTHORING_AUDIO_FFPROBE_PATH` | `ffprobe` | Path to the `ffprobe` binary. |
 
 Example `.env` for local development:
 
@@ -55,6 +70,11 @@ Example `.env` for local development:
 QA_AUTHORING_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/qa_authoring
 QA_AUTHORING_CORS_ALLOWED_ORIGINS=http://localhost:4200
 ```
+
+With the `gcs` backend the API uses Application Default Credentials. Its service account
+needs `roles/storage.objectAdmin` on the bucket, and, to sign playback URLs without a key
+file (as on Cloud Run), `roles/iam.serviceAccountTokenCreator` on itself. With the `local`
+backend the playback URL is the file's `file://` URI, which is only useful for development.
 
 ### 3. Run the migrations
 
@@ -75,6 +95,13 @@ PYTHONPATH=src uvicorn main:app --reload
 
 The liveness probe is `GET /health`, and interactive API docs are served at `/docs`.
 
+To run it in Docker instead (ffmpeg included):
+
+```bash
+docker build -t qa-authoring-engine .
+docker run --rm -p 8080:8080 --env-file .env qa-authoring-engine
+```
+
 ### 5. Run the tests
 
 ```bash
@@ -86,6 +113,9 @@ pytest                          # everything
 Integration tests run against a real PostgreSQL. By default they start a throwaway Postgres 14 container
 through testcontainers, which requires a running Docker daemon. To use an existing database instead, set
 `QA_AUTHORING_TEST_DATABASE_URL` to an asyncpg DSN. Without either, the integration tests are skipped.
+
+The tests of the `ffprobe` adapter against the real binary run when `ffprobe` is on `PATH` and are
+skipped otherwise.
 
 Linting and type checking:
 

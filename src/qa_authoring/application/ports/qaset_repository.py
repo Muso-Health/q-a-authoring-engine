@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from qa_authoring.domain.model.qaset import QASet
+    from qa_authoring.domain.model.qaset import AudioReference, QASet
 
 
 class QASetRepository(Protocol):
@@ -34,3 +34,9 @@ class QASetRepository(Protocol):
     async def uses_intent(self, intent_id: UUID) -> bool: ...
 
     async def uses_category(self, category_id: UUID) -> bool: ...
+
+    async def find_audio(self, audio_id: UUID) -> AudioReference | None: ...
+
+    async def storage_uri_in_use(self, storage_uri: str) -> bool:
+        """Whether any stored audio reference still points at this blob."""
+        ...

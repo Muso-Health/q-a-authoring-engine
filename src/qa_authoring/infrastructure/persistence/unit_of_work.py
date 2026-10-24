@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Self
 
 from qa_authoring.infrastructure.persistence.repositories.category import (
@@ -17,6 +18,7 @@ from qa_authoring.infrastructure.persistence.repositories.qaset import PostgresQ
 from qa_authoring.infrastructure.persistence.repositories.theme import PostgresThemeRepository
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from types import TracebackType
 
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
@@ -28,6 +30,8 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
+
+_log = logging.getLogger(__name__)
 
 
 class SqlAlchemyUnitOfWork:
@@ -46,6 +50,10 @@ class SqlAlchemyUnitOfWork:
         self._engine = engine
         self._connection: AsyncConnection | None = None
         self._transaction: AsyncTransaction | None = None
+        self._after_commit: list[Callable[[], Awaitable[None]]] = []
+
+    def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
+        self._after_commit.append(action)
 
     async def __aenter__(self) -> Self:
         self._connection = await self._engine.connect()
@@ -71,5 +79,12 @@ class SqlAlchemyUnitOfWork:
                 await self._transaction.commit()
             else:
                 await self._transaction.rollback()
+                return
         finally:
             await self._connection.close()
+        for action in self._after_commit:
+            try:
+                await action()
+            except Exception:
+                # Best-effort by contract: the transaction is already committed.
+                _log.warning("after-commit action failed", exc_info=True)

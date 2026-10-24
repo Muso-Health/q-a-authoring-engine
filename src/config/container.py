@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from qa_authoring.application.add_category.handler import AddCategoryHandler
 from qa_authoring.application.add_language_presence.handler import AddLanguagePresenceHandler
 from qa_authoring.application.add_question_variant.handler import AddQuestionVariantHandler
 from qa_authoring.application.attach_intent.handler import AttachIntentHandler
+from qa_authoring.application.audio_upload import AudioUploader
 from qa_authoring.application.create_project.handler import CreateProjectHandler
 from qa_authoring.application.create_protocol.handler import CreateProtocolHandler
 from qa_authoring.application.create_qaset.handler import CreateQASetHandler
 from qa_authoring.application.create_theme.handler import CreateThemeHandler
+from qa_authoring.application.delete_answer_audio.handler import DeleteAnswerAudioHandler
 from qa_authoring.application.delete_category.handler import DeleteCategoryHandler
 from qa_authoring.application.delete_intent.handler import DeleteIntentHandler
 from qa_authoring.application.delete_language.handler import DeleteLanguageHandler
@@ -18,7 +21,10 @@ from qa_authoring.application.delete_protocol.handler import DeleteProtocolHandl
 from qa_authoring.application.delete_qaset.handler import DeleteQASetHandler
 from qa_authoring.application.delete_question_variant.handler import DeleteQuestionVariantHandler
 from qa_authoring.application.delete_theme.handler import DeleteThemeHandler
+from qa_authoring.application.delete_variant_audio.handler import DeleteVariantAudioHandler
 from qa_authoring.application.detach_intent.handler import DetachIntentHandler
+from qa_authoring.application.get_audio.handler import GetAudioHandler
+from qa_authoring.application.get_audio_playback_url.handler import GetAudioPlaybackUrlHandler
 from qa_authoring.application.get_category.handler import GetCategoryHandler
 from qa_authoring.application.get_intent.handler import GetIntentHandler
 from qa_authoring.application.get_language.handler import GetLanguageHandler
@@ -40,6 +46,8 @@ from qa_authoring.application.register_intent.handler import RegisterIntentHandl
 from qa_authoring.application.register_language.handler import RegisterLanguageHandler
 from qa_authoring.application.remove_category.handler import RemoveCategoryHandler
 from qa_authoring.application.remove_language_presence.handler import RemoveLanguagePresenceHandler
+from qa_authoring.application.set_answer_audio.handler import SetAnswerAudioHandler
+from qa_authoring.application.set_variant_audio.handler import SetVariantAudioHandler
 from qa_authoring.application.unlink_answers.handler import UnlinkAnswersHandler
 from qa_authoring.application.unlink_variants.handler import UnlinkVariantsHandler
 from qa_authoring.application.update_answer.handler import UpdateAnswerHandler
@@ -52,6 +60,9 @@ from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from qa_authoring.application.audio_policy import AudioPolicy
+    from qa_authoring.application.ports.audio_probe import AudioProbePort
+    from qa_authoring.application.ports.audio_storage import AudioStoragePort
     from qa_authoring.application.ports.unit_of_work import UnitOfWork
 
 
@@ -59,12 +70,28 @@ class Container:
     """The DI container: builds each use-case handler over the repositories of a unit of work.
 
     ``run`` opens one unit of work per call — one transaction per use case. Framework-agnostic: the
-    API edge reads it off ``app.state``. The unit-of-work factory is injected, so ``main.py`` wires
-    the SQLAlchemy one and tests wire an in-memory one.
+    API edge reads it off ``app.state``. The unit-of-work factory and the audio adapters are
+    injected, so ``main.py`` wires the real ones and tests wire in-memory fakes.
     """
 
-    def __init__(self, unit_of_work: Callable[[], UnitOfWork]) -> None:
+    def __init__(
+        self,
+        unit_of_work: Callable[[], UnitOfWork],
+        *,
+        audio_storage: AudioStoragePort,
+        audio_probe: AudioProbePort,
+        audio_policy: AudioPolicy,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self._unit_of_work = unit_of_work
+        self._audio_storage = audio_storage
+        self._audio_policy = audio_policy
+        self._clock = clock
+        self._audio_uploader = AudioUploader(audio_storage, audio_probe, audio_policy, clock)
+
+    @property
+    def audio_policy(self) -> AudioPolicy:
+        return self._audio_policy
 
     async def run[C, R](
         self,
@@ -211,3 +238,27 @@ class Container:
 
     def build_remove_category(self, uow: UnitOfWork) -> RemoveCategoryHandler:
         return RemoveCategoryHandler(uow.qasets)
+
+    def build_set_answer_audio(self, uow: UnitOfWork) -> SetAnswerAudioHandler:
+        return SetAnswerAudioHandler(
+            uow.qasets, self._audio_uploader, self._audio_storage, uow.after_commit
+        )
+
+    def build_set_variant_audio(self, uow: UnitOfWork) -> SetVariantAudioHandler:
+        return SetVariantAudioHandler(
+            uow.qasets, self._audio_uploader, self._audio_storage, uow.after_commit
+        )
+
+    def build_delete_answer_audio(self, uow: UnitOfWork) -> DeleteAnswerAudioHandler:
+        return DeleteAnswerAudioHandler(uow.qasets, self._audio_storage, uow.after_commit)
+
+    def build_delete_variant_audio(self, uow: UnitOfWork) -> DeleteVariantAudioHandler:
+        return DeleteVariantAudioHandler(uow.qasets, self._audio_storage, uow.after_commit)
+
+    def build_get_audio(self, uow: UnitOfWork) -> GetAudioHandler:
+        return GetAudioHandler(uow.qasets)
+
+    def build_get_audio_playback_url(self, uow: UnitOfWork) -> GetAudioPlaybackUrlHandler:
+        return GetAudioPlaybackUrlHandler(
+            uow.qasets, self._audio_storage, self._audio_policy, self._clock
+        )

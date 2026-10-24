@@ -8,7 +8,13 @@ from sqlalchemy.exc import IntegrityError
 
 from qa_authoring.application.qaset_errors import UnknownLanguageError
 from qa_authoring.application.theme_errors import ThemeNotFoundError
-from qa_authoring.domain.model.qaset import Answer, QASet, QuestionVariant, TranslationLink
+from qa_authoring.domain.model.qaset import (
+    Answer,
+    AudioReference,
+    QASet,
+    QuestionVariant,
+    TranslationLink,
+)
 from qa_authoring.infrastructure.persistence.repositories._integrity import (
     FOREIGN_KEY_VIOLATION,
     constraint_name,
@@ -17,6 +23,7 @@ from qa_authoring.infrastructure.persistence.repositories._integrity import (
 from qa_authoring.infrastructure.persistence.schema.qaset import (
     answer_translation_links,
     answers,
+    audios,
     qaset_categories,
     qasets,
     question_variants,
@@ -29,6 +36,18 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncConnection
+
+
+def _audio(row: Any) -> AudioReference:
+    return AudioReference(
+        id=row.id,
+        storage_uri=row.storage_uri,
+        mime_type=row.mime_type,
+        duration_ms=row.duration_ms,
+        checksum_sha256=row.checksum_sha256,
+        size_bytes=row.size_bytes,
+        created_at=row.created_at,
+    )
 
 
 class _LinkTable:
@@ -76,6 +95,7 @@ class PostgresQASetRepository:
         await self._insert(question_variants, qaset.id, qaset.variants)
         await self._save_intents(qaset)
         await self._save_categories(qaset)
+        await self._save_audios(qaset)
         await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
         await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
@@ -115,6 +135,7 @@ class PostgresQASetRepository:
         # removed items are already gone (ON DELETE CASCADE).
         await self._save_intents(qaset)
         await self._save_categories(qaset)
+        await self._save_audios(qaset)
         await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
         await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
@@ -133,6 +154,51 @@ class PostgresQASetRepository:
     async def uses_intent(self, intent_id: UUID) -> bool:
         query = select(exists().where(variant_intents.c.intent_id == intent_id))
         return bool(await self._connection.scalar(query))
+
+    async def find_audio(self, audio_id: UUID) -> AudioReference | None:
+        row = (
+            await self._connection.execute(select(audios).where(audios.c.id == audio_id))
+        ).one_or_none()
+        return None if row is None else _audio(row)
+
+    async def storage_uri_in_use(self, storage_uri: str) -> bool:
+        query = select(exists().where(audios.c.storage_uri == storage_uri))
+        return bool(await self._connection.scalar(query))
+
+    async def _save_audios(self, qaset: QASet) -> None:
+        # Audio references are immutable: a replacement is a new row, so a diff of ids suffices.
+        answer_ids = [a.id for a in qaset.answers]
+        variant_ids = [v.id for v in qaset.variants]
+        stored: set[UUID] = set(
+            await self._connection.scalars(
+                select(audios.c.id).where(
+                    audios.c.answer_id.in_(answer_ids) | audios.c.variant_id.in_(variant_ids)
+                )
+            )
+        )
+        current: list[tuple[str, UUID, AudioReference]] = [
+            *(("answer_id", a.id, a.audio) for a in qaset.answers if a.audio is not None),
+            *(("variant_id", v.id, v.audio) for v in qaset.variants if v.audio is not None),
+        ]
+        missing = stored - {audio.id for _, _, audio in current}
+        if missing:
+            await self._connection.execute(delete(audios).where(audios.c.id.in_(missing)))
+        new = [
+            {
+                "id": audio.id,
+                column: item_id,
+                "storage_uri": audio.storage_uri,
+                "mime_type": audio.mime_type,
+                "duration_ms": audio.duration_ms,
+                "checksum_sha256": audio.checksum_sha256,
+                "size_bytes": audio.size_bytes,
+                "created_at": audio.created_at,
+            }
+            for column, item_id, audio in current
+            if audio.id not in stored
+        ]
+        for row in new:
+            await self._connection.execute(insert(audios).values(**row))
 
     async def uses_category(self, category_id: UUID) -> bool:
         query = select(exists().where(qaset_categories.c.category_id == category_id))
@@ -259,13 +325,23 @@ class PostgresQASetRepository:
         if not rows:
             return ()
         ids = [row.id for row in rows]
+        audio_by_item: dict[UUID, AudioReference] = {}
+        for row in await self._connection.execute(
+            select(audios)
+            .outerjoin(answers, answers.c.id == audios.c.answer_id)
+            .outerjoin(question_variants, question_variants.c.id == audios.c.variant_id)
+            .where(answers.c.qaset_id.in_(ids) | question_variants.c.qaset_id.in_(ids))
+        ):
+            audio_by_item[row.answer_id or row.variant_id] = _audio(row)
         answers_by_qaset: defaultdict[UUID, list[Answer]] = defaultdict(list)
         for a in await self._connection.execute(
             select(answers)
             .where(answers.c.qaset_id.in_(ids))
             .order_by(answers.c.created_at, answers.c.id)
         ):
-            answers_by_qaset[a.qaset_id].append(Answer(a.id, a.language_id, a.text))
+            answers_by_qaset[a.qaset_id].append(
+                Answer(a.id, a.language_id, a.text, audio_by_item.get(a.id))
+            )
         intents_by_variant: defaultdict[UUID, list[UUID]] = defaultdict(list)
         for row in await self._connection.execute(
             select(variant_intents.c.variant_id, variant_intents.c.intent_id)
@@ -281,7 +357,13 @@ class PostgresQASetRepository:
             .order_by(question_variants.c.created_at, question_variants.c.id)
         ):
             variants_by_qaset[v.qaset_id].append(
-                QuestionVariant(v.id, v.language_id, v.text, intents_by_variant[v.id])
+                QuestionVariant(
+                    v.id,
+                    v.language_id,
+                    v.text,
+                    intents_by_variant[v.id],
+                    audio_by_item.get(v.id),
+                )
             )
         categories_by_qaset: defaultdict[UUID, list[UUID]] = defaultdict(list)
         for row in await self._connection.execute(

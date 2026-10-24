@@ -1,0 +1,18 @@
+# Only src/, pyproject.toml, LICENSE, alembic.ini and migrations/ are needed to build and run.
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+.git/
+.github/
+.idea/
+.vscode/
+tests/
+.env
+*.env
+.claude/
+.audio-storage/

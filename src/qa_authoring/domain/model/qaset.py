@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -8,6 +9,7 @@ from qa_authoring.domain.value_objects.naming import clean_text
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from datetime import datetime
 
 
 class LanguageAlreadyPresentError(Exception):
@@ -82,14 +84,73 @@ class CategoryNotAttachedError(Exception):
         self.category_id = category_id
 
 
+class InvalidAudioReferenceError(ValueError):
+    """Raised when audio reference metadata is malformed."""
+
+
+class NoAudioError(Exception):
+    """Raised when removing the audio of an item that has none."""
+
+    def __init__(self, item_id: UUID) -> None:
+        super().__init__(f"{item_id} has no audio")
+        self.item_id = item_id
+
+
+class AudioAlreadyBoundError(ValueError):
+    """Raised when one audio reference would be bound to a second item."""
+
+    def __init__(self, audio_id: UUID) -> None:
+        super().__init__(f"audio {audio_id} is already bound to an item")
+        self.audio_id = audio_id
+
+
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+_MIME_TYPE = re.compile(r"[a-z0-9.+-]+/[a-z0-9.+-]+")
+
+
+@dataclass(frozen=True, slots=True)
+class AudioReference:
+    """Where an item's recording is stored and what it is; never the bytes themselves."""
+
+    id: UUID
+    storage_uri: str
+    mime_type: str
+    duration_ms: int
+    checksum_sha256: str
+    size_bytes: int
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        if not self.storage_uri:
+            raise InvalidAudioReferenceError("storage_uri must not be empty")
+        if not _MIME_TYPE.fullmatch(self.mime_type):
+            raise InvalidAudioReferenceError(f"invalid mime type {self.mime_type!r}")
+        if self.duration_ms < 0:
+            raise InvalidAudioReferenceError("duration_ms must not be negative")
+        if self.size_bytes <= 0:
+            raise InvalidAudioReferenceError("size_bytes must be positive")
+        if not _SHA256_HEX.fullmatch(self.checksum_sha256):
+            raise InvalidAudioReferenceError("checksum_sha256 must be 64 lowercase hex digits")
+        if self.created_at.tzinfo is None:
+            raise InvalidAudioReferenceError("created_at must be timezone-aware")
+
+
 class _Text:
-    __slots__ = ("_id", "_language_id", "_text")
+    __slots__ = ("_audio", "_id", "_language_id", "_text")
     subject = "text"
 
-    def __init__(self, entity_id: UUID, language_id: UUID, text: str) -> None:
+    def __init__(
+        self, entity_id: UUID, language_id: UUID, text: str, audio: AudioReference | None = None
+    ) -> None:
         self._id = entity_id
         self._language_id = language_id
         self._text = clean_text(text, subject=self.subject)
+        self._audio = audio
+
+    @property
+    def audio(self) -> AudioReference | None:
+        """At most one recording per item."""
+        return self._audio
 
     @property
     def id(self) -> UUID:
@@ -122,9 +183,14 @@ class QuestionVariant(_Text):
     subject = "question variant"
 
     def __init__(
-        self, variant_id: UUID, language_id: UUID, text: str, intent_ids: Iterable[UUID] = ()
+        self,
+        variant_id: UUID,
+        language_id: UUID,
+        text: str,
+        intent_ids: Iterable[UUID] = (),
+        audio: AudioReference | None = None,
     ) -> None:
-        super().__init__(variant_id, language_id, text)
+        super().__init__(variant_id, language_id, text, audio)
         self._intent_ids: dict[UUID, None] = dict.fromkeys(intent_ids)
 
     @property
@@ -273,6 +339,9 @@ class QASet:
             )
         for link in variant_links:
             self._variant_links.put(link, self._variant(link.low_id), self._variant(link.high_id))
+        bound = [audio.id for audio in self.audios]
+        if len(bound) != len(set(bound)):
+            raise AudioAlreadyBoundError(next(a for a in bound if bound.count(a) > 1))
 
     @classmethod
     def create(cls, *, theme_id: UUID, language_id: UUID, answer_text: str) -> QASet:
@@ -347,6 +416,47 @@ class QASet:
     def remove_variant(self, variant_id: UUID) -> None:
         del self._variants[self._variant(variant_id).id]
         self._variant_links.drop_involving({variant_id})
+
+    @property
+    def audios(self) -> tuple[AudioReference, ...]:
+        items: list[_Text] = [*self._answers.values(), *self._variants.values()]
+        return tuple(item.audio for item in items if item.audio is not None)
+
+    def find_audio(self, audio_id: UUID) -> AudioReference | None:
+        return next((audio for audio in self.audios if audio.id == audio_id), None)
+
+    def answer_by_id(self, answer_id: UUID) -> Answer:
+        return self._answer_by_id(answer_id)
+
+    def variant_by_id(self, variant_id: UUID) -> QuestionVariant:
+        return self._variant(variant_id)
+
+    def set_answer_audio(self, answer_id: UUID, audio: AudioReference) -> AudioReference | None:
+        """Bind (or replace) the answer's recording; returns the replaced one, if any."""
+        return self._set_audio(self._answer_by_id(answer_id), audio)
+
+    def set_variant_audio(self, variant_id: UUID, audio: AudioReference) -> AudioReference | None:
+        """Bind (or replace) the variant's recording; returns the replaced one, if any."""
+        return self._set_audio(self._variant(variant_id), audio)
+
+    def remove_answer_audio(self, answer_id: UUID) -> AudioReference:
+        return self._remove_audio(self._answer_by_id(answer_id))
+
+    def remove_variant_audio(self, variant_id: UUID) -> AudioReference:
+        return self._remove_audio(self._variant(variant_id))
+
+    def _set_audio(self, item: _Text, audio: AudioReference) -> AudioReference | None:
+        if self.find_audio(audio.id) is not None:
+            raise AudioAlreadyBoundError(audio.id)
+        previous, item._audio = item._audio, audio
+        return previous
+
+    @staticmethod
+    def _remove_audio(item: _Text) -> AudioReference:
+        if item._audio is None:
+            raise NoAudioError(item.id)
+        removed, item._audio = item._audio, None
+        return removed
 
     def link_answers(self, answer_a_id: UUID, answer_b_id: UUID) -> TranslationLink:
         link = TranslationLink.between(uuid4(), answer_a_id, answer_b_id)

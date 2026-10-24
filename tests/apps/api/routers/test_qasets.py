@@ -78,7 +78,8 @@ def test_create_qaset(client: TestClient) -> None:
     [presence] = body["languages"]
     assert presence["language_id"] == fr
     assert presence["answer"]["text"] == "Rest."
-    assert set(presence["answer"]) == {"id", "text", "links"}
+    assert set(presence["answer"]) == {"id", "text", "links", "audio"}
+    assert presence["answer"]["audio"] is None
     assert presence["answer"]["links"] == []
     assert presence["variants"] == []
     assert presence["variant_count"] == 0
@@ -261,6 +262,7 @@ def test_variant_lifecycle(client: TestClient, setup: tuple[str, str, str]) -> N
         "text": "What?",
         "links": [],
         "intents": [],
+        "audio": None,
     }
     url = f"/qasets/{qaset_id}/variants/{created['id']}"
 

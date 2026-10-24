@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from apps.api.schemas.audio import AudioSummaryResponse
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -115,6 +117,7 @@ class AnswerResponse(BaseModel):
     id: UUID
     text: str
     links: list[TranslationResponse]
+    audio: AudioSummaryResponse | None
 
 
 class QuestionVariantResponse(BaseModel):
@@ -123,6 +126,7 @@ class QuestionVariantResponse(BaseModel):
     text: str
     links: list[TranslationResponse]
     intents: list[AttachedIntentResponse]
+    audio: AudioSummaryResponse | None
 
     @classmethod
     def of(cls, result: QuestionVariantResult) -> QuestionVariantResponse:
@@ -132,6 +136,7 @@ class QuestionVariantResponse(BaseModel):
             text=result.text,
             links=[TranslationResponse.of(link) for link in result.links],
             intents=[AttachedIntentResponse.of(intent) for intent in result.intents],
+            audio=AudioSummaryResponse.of(result.audio),
         )
 
 
@@ -149,6 +154,7 @@ class LanguagePresenceResponse(BaseModel):
                 id=result.answer.id,
                 text=result.answer.text,
                 links=[TranslationResponse.of(link) for link in result.answer.links],
+                audio=AudioSummaryResponse.of(result.answer.audio),
             ),
             variants=[QuestionVariantResponse.of(v) for v in result.variants],
             variant_count=result.variant_count,

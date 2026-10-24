@@ -48,7 +48,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0008_categories",)]
+    assert versions == [("0009_audios",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -102,6 +102,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ),
         ("fk_answers_language_id_languages", "answers", "languages", "RESTRICT"),
         ("fk_answers_qaset_id_qasets", "answers", "qasets", "CASCADE"),
+        ("fk_audios_answer_id_answers", "audios", "answers", "CASCADE"),
+        ("fk_audios_variant_id_question_variants", "audios", "question_variants", "CASCADE"),
         ("fk_projects_base_language_id_languages", "projects", "languages", "RESTRICT"),
         ("fk_protocols_project_id_projects", "protocols", "projects", "RESTRICT"),
         (
@@ -179,6 +181,21 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("uq_categories_key", "UNIQUE"),
         ("uq_intents_key", "UNIQUE"),
     ]
+    audio_constraints = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' AND table_name = 'audios' "
+            "AND constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'CHECK') "
+            "AND constraint_name NOT LIKE '%not_null' ORDER BY constraint_name",
+        )
+    )
+    assert audio_constraints == [
+        ("ck_audios_exactly_one_target", "CHECK"),
+        ("pk_audios", "PRIMARY KEY"),
+        ("uq_audios_answer_id", "UNIQUE"),
+        ("uq_audios_variant_id", "UNIQUE"),
+    ]
     unique = asyncio.run(
         _query(
             postgres_url,
@@ -199,6 +216,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_answer_translation_links_answer_high_id",),
         ("ix_answer_translation_links_answer_low_id",),
         ("ix_answers_language_id",),
+        ("ix_audios_storage_uri",),
         ("ix_projects_base_language_id",),
         ("ix_protocols_project_id",),
         ("ix_qaset_categories_category_id",),
@@ -220,11 +238,13 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             f"WHERE table_schema = '{SCHEMA}' AND column_name = 'created_at' ORDER BY table_name",
         )
     )
+    # Creation-order columns default to now(); an audio's created_at is set by the domain.
     assert created_at == [
-        (table, "timestamp with time zone", "NO", "now()")
+        (table, "timestamp with time zone", "NO", None if table == "audios" else "now()")
         for table in (
             "answer_translation_links",
             "answers",
+            "audios",
             "qaset_categories",
             "question_variants",
             "variant_intents",
@@ -239,7 +259,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
                 "SELECT 1 FROM information_schema.columns "
                 f"WHERE table_schema = '{SCHEMA}' AND (column_name = 'created_at' "
                 "OR table_name LIKE '%translation_links' OR table_name LIKE '%intents' "
-                "OR table_name LIKE '%categories')",
+                "OR table_name LIKE '%categories' OR table_name = 'audios')",
             )
         )
         == []

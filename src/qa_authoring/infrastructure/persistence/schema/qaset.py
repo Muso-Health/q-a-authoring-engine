@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     PrimaryKeyConstraint,
     Table,
     Text,
@@ -135,4 +137,25 @@ qaset_categories = Table(
     Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
     # Also the index on qaset_id.
     PrimaryKeyConstraint("qaset_id", "category_id"),
+)
+
+audios = Table(
+    "audios",
+    metadata,
+    Column("id", Uuid, nullable=False),
+    Column("answer_id", Uuid, ForeignKey("answers.id", ondelete="CASCADE"), nullable=True),
+    Column(
+        "variant_id", Uuid, ForeignKey("question_variants.id", ondelete="CASCADE"), nullable=True
+    ),
+    Column("storage_uri", Text, nullable=False, index=True),
+    Column("mime_type", Text, nullable=False),
+    Column("duration_ms", Integer, nullable=False),
+    Column("checksum_sha256", Text, nullable=False),
+    Column("size_bytes", BigInteger, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    PrimaryKeyConstraint("id"),
+    # One audio per item; each also serves as that column's index.
+    UniqueConstraint("answer_id"),
+    UniqueConstraint("variant_id"),
+    CheckConstraint("(answer_id IS NULL) <> (variant_id IS NULL)", name="exactly_one_target"),
 )

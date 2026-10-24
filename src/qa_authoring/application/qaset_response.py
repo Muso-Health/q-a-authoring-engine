@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from qa_authoring.domain.model.qaset import (
+        AudioReference,
         LanguagePresence,
         QASet,
         QuestionVariant,
@@ -38,6 +39,23 @@ class TranslationLinkResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AudioSummaryResult:
+    audio_id: UUID
+    mime_type: str
+    duration_ms: int
+    size_bytes: int
+    checksum_sha256: str
+
+    @classmethod
+    def of(cls, audio: AudioReference | None) -> AudioSummaryResult | None:
+        if audio is None:
+            return None
+        return cls(
+            audio.id, audio.mime_type, audio.duration_ms, audio.size_bytes, audio.checksum_sha256
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class AttachedCategoryResult:
     category_id: UUID
     name: str
@@ -54,6 +72,7 @@ class AnswerResult:
     id: UUID
     text: str
     links: tuple[TranslationResult, ...]
+    audio: AudioSummaryResult | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +82,7 @@ class QuestionVariantResult:
     text: str
     links: tuple[TranslationResult, ...]
     intents: tuple[AttachedIntentResult, ...]
+    audio: AudioSummaryResult | None
 
     @classmethod
     def of(
@@ -71,7 +91,14 @@ class QuestionVariantResult:
         """``intent_texts`` maps the variant's intent ids to their catalogue text."""
         links = tuple(TranslationResult.of(t) for t in qaset.variant_translations(variant.id))
         intents = tuple(AttachedIntentResult(i, intent_texts[i]) for i in variant.intent_ids)
-        return cls(variant.id, variant.language_id, variant.text, links, intents)
+        return cls(
+            variant.id,
+            variant.language_id,
+            variant.text,
+            links,
+            intents,
+            AudioSummaryResult.of(variant.audio),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +116,7 @@ class LanguagePresenceResult:
         links = tuple(TranslationResult.of(t) for t in qaset.answer_translations(answer.id))
         return cls(
             presence.language_id,
-            AnswerResult(answer.id, answer.text, links),
+            AnswerResult(answer.id, answer.text, links, AudioSummaryResult.of(answer.audio)),
             tuple(QuestionVariantResult.of(qaset, v, intent_texts) for v in presence.variants),
             presence.variant_count,
         )

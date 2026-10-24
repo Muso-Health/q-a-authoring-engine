@@ -79,3 +79,35 @@ def test_cors_origins_are_split_from_env(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_cors_origins_default_to_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _settings(monkeypatch).cors_origins == []
+
+
+def test_audio_settings_are_read_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings(
+        monkeypatch,
+        AUDIO_STORAGE_BACKEND="gcs",
+        AUDIO_BUCKET="qa-audio",
+        AUDIO_OBJECT_PREFIX="recordings/",
+        AUDIO_PLAYBACK_URL_TTL_SECONDS="120",
+        AUDIO_MAX_UPLOAD_BYTES="2048",
+        AUDIO_ALLOWED_MIME_TYPES=" audio/webm, audio/ogg ,,",
+        AUDIO_FFPROBE_PATH="/usr/bin/ffprobe",
+    )
+    assert settings.audio_storage_backend == "gcs"
+    assert settings.audio_bucket == "qa-audio"
+    assert settings.audio_object_prefix == "recordings/"
+    assert settings.audio_playback_url_ttl_seconds == 120
+    assert settings.audio_max_upload_bytes == 2048
+    assert settings.audio_mime_types == frozenset({"audio/webm", "audio/ogg"})
+    assert settings.audio_ffprobe_path == "/usr/bin/ffprobe"
+
+
+def test_audio_defaults_store_locally(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings(monkeypatch)
+    assert settings.audio_storage_backend == "local"
+    assert "audio/webm" in settings.audio_mime_types
+
+
+@pytest.mark.parametrize("backend", ["s3", "", "GCS"])
+def test_audio_backend_must_be_known(monkeypatch: pytest.MonkeyPatch, backend: str) -> None:
+    with pytest.raises(ValidationError):
+        _settings(monkeypatch, AUDIO_STORAGE_BACKEND=backend)

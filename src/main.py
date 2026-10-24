@@ -5,6 +5,11 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from apps.api.app import create_app
+from config.audio import (
+    audio_policy_from_settings,
+    audio_probe_from_settings,
+    audio_storage_from_settings,
+)
 from config.container import Container
 from config.database import engine_factory_from_settings
 from config.settings import Settings
@@ -20,12 +25,20 @@ if TYPE_CHECKING:
 # harmless for the local DSN — and disposed on shutdown.
 _settings = Settings()
 _engine_factory = engine_factory_from_settings(_settings)
+_audio_storage = audio_storage_from_settings(_settings)
+_audio_probe = audio_probe_from_settings(_settings)
+_audio_policy = audio_policy_from_settings(_settings)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with _engine_factory.engine() as engine:
-        app.state.container = Container(partial(SqlAlchemyUnitOfWork, engine))
+        app.state.container = Container(
+            partial(SqlAlchemyUnitOfWork, engine),
+            audio_storage=_audio_storage,
+            audio_probe=_audio_probe,
+            audio_policy=_audio_policy,
+        )
         yield
 
 

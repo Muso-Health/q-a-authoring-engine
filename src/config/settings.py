@@ -42,12 +42,36 @@ class Settings(BaseSettings):
     # in the env var; empty disables CORS (same-origin / server-to-server, and the tests).
     cors_allowed_origins: str = ""
 
+    # Audio recordings. "local" keeps blobs on the filesystem (dev/tests); "gcs" uses
+    # ``audio_bucket``. Object keys are ``audio_object_prefix`` + the content's sha256. Uploads
+    # are bounded by ``audio_max_upload_bytes`` and must probe as one of the comma-separated
+    # ``audio_allowed_mime_types``. ``audio_ffprobe_path`` locates ffprobe (from ffmpeg).
+    audio_storage_backend: str = "local"
+    audio_bucket: str = ""
+    audio_object_prefix: str = "audio/"
+    audio_local_directory: str = ".audio-storage"
+    audio_playback_url_ttl_seconds: int = 900
+    audio_max_upload_bytes: int = 10 * 1024 * 1024
+    audio_allowed_mime_types: str = "audio/webm,audio/ogg,audio/wav,audio/mpeg,audio/mp4"
+    audio_ffprobe_path: str = "ffprobe"
+
     @field_validator("db_schema")
     @classmethod
     def _plain_identifier_not_public(cls, value: str) -> str:
         if not _SCHEMA_NAME.match(value) or value == "public":
             raise ValueError("db_schema must be a plain lowercase identifier other than 'public'")
         return value
+
+    @field_validator("audio_storage_backend")
+    @classmethod
+    def _known_audio_backend(cls, value: str) -> str:
+        if value not in {"local", "gcs"}:
+            raise ValueError("audio_storage_backend must be 'local' or 'gcs'")
+        return value
+
+    @property
+    def audio_mime_types(self) -> frozenset[str]:
+        return frozenset(m.strip() for m in self.audio_allowed_mime_types.split(",") if m.strip())
 
     @property
     def use_cloud_sql_connector(self) -> bool:

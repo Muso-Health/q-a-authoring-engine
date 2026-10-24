@@ -8,6 +8,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from qa_authoring.application.audio_errors import (
+    AudioNotFoundError,
+    AudioTooLargeError,
+    UnsupportedAudioTypeError,
+)
 from qa_authoring.application.category_errors import CategoryInUseError, CategoryNotFoundError
 from qa_authoring.application.intent_errors import IntentInUseError, IntentNotFoundError
 from qa_authoring.application.language_errors import (
@@ -35,6 +40,7 @@ from qa_authoring.domain.model.qaset import (
     LanguageNotPresentError,
     LanguagePresenceRequiredError,
     LinkAlreadyExistsError,
+    NoAudioError,
     QuestionVariantNotFoundError,
     SameLanguageError,
     SelfLinkError,
@@ -69,6 +75,8 @@ _RULES: dict[type[Exception], _Rule] = {
     IntentNotAttachedError: _Rule(404, "intent_not_attached"),
     CategoryNotFoundError: _Rule(404, "category_not_found"),
     CategoryNotAttachedError: _Rule(404, "category_not_attached"),
+    AudioNotFoundError: _Rule(404, "audio_not_found"),
+    NoAudioError: _Rule(404, "audio_not_found"),
     LanguageCodeAlreadyExistsError: _Rule(409, "language_code_already_exists"),
     LanguageInUseError: _Rule(409, "language_in_use"),
     ProjectHasProtocolsError: _Rule(409, "project_has_protocols"),
@@ -87,6 +95,8 @@ _RULES: dict[type[Exception], _Rule] = {
     UnknownLanguageError: _Rule(422, "unknown_language"),
     SameLanguageError: _Rule(422, "same_language"),
     SelfLinkError: _Rule(422, "self_link"),
+    UnsupportedAudioTypeError: _Rule(422, "unsupported_audio_type"),
+    AudioTooLargeError: _Rule(422, "audio_too_large"),
 }
 
 _VALIDATION_CODE = "invalid_request"

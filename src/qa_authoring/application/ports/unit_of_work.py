@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, Self
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from types import TracebackType
 
     from qa_authoring.application.ports.category_repository import CategoryRepository
@@ -25,6 +26,11 @@ class UnitOfWork(Protocol):
     qasets: QASetRepository
     intents: IntentRepository
     categories: CategoryRepository
+
+    def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
+        """Run ``action`` once the transaction has committed; best-effort, never rolled back.
+        Skipped entirely if the transaction rolls back."""
+        ...
 
     async def __aenter__(self) -> Self: ...
 
