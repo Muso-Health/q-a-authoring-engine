@@ -5,6 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
+from apps.api.auth import requires
 from apps.api.dependencies import get_container
 from apps.api.schemas.catalog import (
     CreateProjectRequest,
@@ -18,13 +19,16 @@ from qa_authoring.application.delete_project.command import DeleteProjectCommand
 from qa_authoring.application.get_project.command import GetProjectQuery
 from qa_authoring.application.list_projects.command import ListProjectsQuery
 from qa_authoring.application.update_project.command import UpdateProjectCommand
+from qa_authoring.domain.model.permission import Permission
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", status_code=status.HTTP_201_CREATED, dependencies=[requires(Permission.MANAGE_CATALOG)]
+)
 async def create_project(body: CreateProjectRequest, container: ContainerDep) -> ProjectResponse:
     """Create a project. 422 if the base language does not exist; it cannot change afterwards."""
     command = CreateProjectCommand(
@@ -46,7 +50,7 @@ async def get_project(project_id: UUID, container: ContainerDep) -> ProjectRespo
     return ProjectResponse.of(await container.run(container.build_get_project, query))
 
 
-@router.patch("/{project_id}")
+@router.patch("/{project_id}", dependencies=[requires(Permission.MANAGE_CATALOG)])
 async def update_project(
     project_id: UUID, body: UpdateNamedRequest, container: ContainerDep
 ) -> ProjectResponse:
@@ -57,7 +61,11 @@ async def update_project(
     return ProjectResponse.of(await container.run(container.build_update_project, command))
 
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.MANAGE_CATALOG)],
+)
 async def delete_project(project_id: UUID, container: ContainerDep) -> Response:
     """409 while the project still has protocols."""
     await container.run(container.build_delete_project, DeleteProjectCommand(project_id))

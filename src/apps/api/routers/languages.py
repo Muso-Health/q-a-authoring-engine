@@ -5,6 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
+from apps.api.auth import requires
 from apps.api.dependencies import get_container
 from apps.api.schemas.languages import (
     LanguageResponse,
@@ -18,13 +19,16 @@ from qa_authoring.application.get_language.command import GetLanguageQuery
 from qa_authoring.application.list_languages.command import ListLanguagesQuery
 from qa_authoring.application.register_language.command import RegisterLanguageCommand
 from qa_authoring.application.update_language.command import UpdateLanguageCommand
+from qa_authoring.domain.model.permission import Permission
 
 router = APIRouter(prefix="/languages", tags=["languages"])
 
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", status_code=status.HTTP_201_CREATED, dependencies=[requires(Permission.MANAGE_LANGUAGES)]
+)
 async def register_language(
     body: RegisterLanguageRequest, container: ContainerDep
 ) -> LanguageResponse:
@@ -47,7 +51,7 @@ async def get_language(language_id: UUID, container: ContainerDep) -> LanguageRe
     return LanguageResponse.of(await container.run(container.build_get_language, query))
 
 
-@router.patch("/{language_id}")
+@router.patch("/{language_id}", dependencies=[requires(Permission.MANAGE_LANGUAGES)])
 async def update_language(
     language_id: UUID, body: UpdateLanguageRequest, container: ContainerDep
 ) -> LanguageResponse:
@@ -56,7 +60,11 @@ async def update_language(
     return LanguageResponse.of(await container.run(container.build_update_language, command))
 
 
-@router.delete("/{language_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{language_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.MANAGE_LANGUAGES)],
+)
 async def delete_language(language_id: UUID, container: ContainerDep) -> Response:
     await container.run(container.build_delete_language, DeleteLanguageCommand(language_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

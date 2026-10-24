@@ -10,9 +10,11 @@ from config.audio import (
     audio_probe_from_settings,
     audio_storage_from_settings,
 )
+from config.auth import identity_provider_from_settings
 from config.container import Container
 from config.database import engine_factory_from_settings
 from config.settings import Settings
+from qa_authoring.application.bootstrap_admin.command import BootstrapAdminCommand
 from qa_authoring.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 if TYPE_CHECKING:
@@ -28,18 +30,27 @@ _engine_factory = engine_factory_from_settings(_settings)
 _audio_storage = audio_storage_from_settings(_settings)
 _audio_probe = audio_probe_from_settings(_settings)
 _audio_policy = audio_policy_from_settings(_settings)
+_identity_provider = identity_provider_from_settings(_settings)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with _engine_factory.engine() as engine:
-        app.state.container = Container(
+        container = Container(
             partial(SqlAlchemyUnitOfWork, engine),
             audio_storage=_audio_storage,
             audio_probe=_audio_probe,
             audio_policy=_audio_policy,
         )
+        if _settings.bootstrap_admin_email:
+            command = BootstrapAdminCommand(_settings.bootstrap_admin_email)
+            await container.run(container.build_bootstrap_admin, command)
+        app.state.container = container
         yield
 
 
-app = create_app(cors_allowed_origins=_settings.cors_origins, lifespan=_lifespan)
+app = create_app(
+    identity_provider=_identity_provider,
+    cors_allowed_origins=_settings.cors_origins,
+    lifespan=_lifespan,
+)

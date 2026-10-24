@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import text
 
+import qa_authoring.infrastructure.persistence.schema.access
 import qa_authoring.infrastructure.persistence.schema.catalog
 import qa_authoring.infrastructure.persistence.schema.category
 import qa_authoring.infrastructure.persistence.schema.intent

@@ -5,6 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
+from apps.api.auth import requires
 from apps.api.dependencies import get_container
 from apps.api.schemas.categories import (
     CategoriesResponse,
@@ -16,13 +17,16 @@ from qa_authoring.application.delete_category.command import DeleteCategoryComma
 from qa_authoring.application.get_category.command import GetCategoryQuery
 from qa_authoring.application.list_categories.command import ListCategoriesQuery
 from qa_authoring.application.register_category.command import RegisterCategoryCommand
+from qa_authoring.domain.model.permission import Permission
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", status_code=status.HTTP_201_CREATED, dependencies=[requires(Permission.MANAGE_CATEGORIES)]
+)
 async def register_category(
     body: RegisterCategoryRequest, response: Response, container: ContainerDep
 ) -> CategoryResponse:
@@ -48,7 +52,11 @@ async def get_category(category_id: UUID, container: ContainerDep) -> CategoryRe
     return CategoryResponse.of(await container.run(container.build_get_category, query))
 
 
-@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.MANAGE_CATEGORIES)],
+)
 async def delete_category(category_id: UUID, container: ContainerDep) -> Response:
     """409 while any QA set has the category attached."""
     await container.run(container.build_delete_category, DeleteCategoryCommand(category_id))

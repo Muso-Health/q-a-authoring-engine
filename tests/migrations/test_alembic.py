@@ -13,6 +13,8 @@ pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "qa_authoring_it"
+# An audio's created_at is set by the domain; role assignments need per-row timestamps.
+_CREATED_AT_DEFAULTS = {"audios": None, "user_roles": "clock_timestamp()"}
 
 
 def _alembic_config() -> Config:
@@ -48,7 +50,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0009_audios",)]
+    assert versions == [("0010_access",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -122,7 +124,10 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ),
         ("fk_question_variants_qaset_id_answers", "question_variants", "answers", "CASCADE"),
         ("fk_question_variants_qaset_id_qasets", "question_variants", "qasets", "CASCADE"),
+        ("fk_role_permissions_role_id_roles", "role_permissions", "roles", "CASCADE"),
         ("fk_themes_protocol_id_protocols", "themes", "protocols", "RESTRICT"),
+        ("fk_user_roles_role_id_roles", "user_roles", "roles", "RESTRICT"),
+        ("fk_user_roles_user_id_users", "user_roles", "users", "CASCADE"),
         ("fk_variant_intents_intent_id_intents", "variant_intents", "intents", "RESTRICT"),
         (
             "fk_variant_intents_variant_id_question_variants",
@@ -196,6 +201,32 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("uq_audios_answer_id", "UNIQUE"),
         ("uq_audios_variant_id", "UNIQUE"),
     ]
+    access_constraints = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' "
+            "AND table_name IN ('users', 'roles', 'role_permissions', 'user_roles') "
+            "AND constraint_type IN ('PRIMARY KEY', 'UNIQUE') ORDER BY constraint_name",
+        )
+    )
+    assert access_constraints == [
+        ("pk_role_permissions", "PRIMARY KEY"),
+        ("pk_roles", "PRIMARY KEY"),
+        ("pk_user_roles", "PRIMARY KEY"),
+        ("pk_users", "PRIMARY KEY"),
+        ("uq_roles_key", "UNIQUE"),
+    ]
+    user_indexes = asyncio.run(
+        _query(
+            postgres_url,
+            f"SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = '{SCHEMA}' "
+            "AND tablename = 'users' AND indexname LIKE 'uq_%' ORDER BY indexname",
+        )
+    )
+    assert [name for name, _ in user_indexes] == ["uq_users_email_lower", "uq_users_subject"]
+    assert "lower(email)" in str(user_indexes[0][1])
+    assert "WHERE (subject IS NOT NULL)" in str(user_indexes[1][1])
     unique = asyncio.run(
         _query(
             postgres_url,
@@ -224,6 +255,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_question_variants_language_id",),
         ("ix_question_variants_qaset_id_language_id",),
         ("ix_themes_protocol_id",),
+        ("ix_user_roles_role_id",),
         ("ix_variant_intents_intent_id",),
         ("ix_variant_intents_variant_id",),
         ("ix_variant_translation_links_variant_high_id",),
@@ -238,15 +270,15 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             f"WHERE table_schema = '{SCHEMA}' AND column_name = 'created_at' ORDER BY table_name",
         )
     )
-    # Creation-order columns default to now(); an audio's created_at is set by the domain.
     assert created_at == [
-        (table, "timestamp with time zone", "NO", None if table == "audios" else "now()")
+        (table, "timestamp with time zone", "NO", _CREATED_AT_DEFAULTS.get(table, "now()"))
         for table in (
             "answer_translation_links",
             "answers",
             "audios",
             "qaset_categories",
             "question_variants",
+            "user_roles",
             "variant_intents",
             "variant_translation_links",
         )
@@ -259,7 +291,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
                 "SELECT 1 FROM information_schema.columns "
                 f"WHERE table_schema = '{SCHEMA}' AND (column_name = 'created_at' "
                 "OR table_name LIKE '%translation_links' OR table_name LIKE '%intents' "
-                "OR table_name LIKE '%categories' OR table_name = 'audios')",
+                "OR table_name LIKE '%categories' OR table_name = 'audios' "
+                "OR table_name IN ('users', 'roles', 'role_permissions', 'user_roles'))",
             )
         )
         == []

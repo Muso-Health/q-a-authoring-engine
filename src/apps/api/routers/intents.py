@@ -5,6 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
+from apps.api.auth import requires
 from apps.api.dependencies import get_container
 from apps.api.schemas.intents import IntentResponse, IntentsResponse, RegisterIntentRequest
 from config.container import Container
@@ -12,13 +13,16 @@ from qa_authoring.application.delete_intent.command import DeleteIntentCommand
 from qa_authoring.application.get_intent.command import GetIntentQuery
 from qa_authoring.application.list_intents.command import ListIntentsQuery
 from qa_authoring.application.register_intent.command import RegisterIntentCommand
+from qa_authoring.domain.model.permission import Permission
 
 router = APIRouter(prefix="/intents", tags=["intents"])
 
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", status_code=status.HTTP_201_CREATED, dependencies=[requires(Permission.MANAGE_INTENTS)]
+)
 async def register_intent(
     body: RegisterIntentRequest, response: Response, container: ContainerDep
 ) -> IntentResponse:
@@ -44,7 +48,11 @@ async def get_intent(intent_id: UUID, container: ContainerDep) -> IntentResponse
     return IntentResponse.of(await container.run(container.build_get_intent, query))
 
 
-@router.delete("/{intent_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{intent_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.MANAGE_INTENTS)],
+)
 async def delete_intent(intent_id: UUID, container: ContainerDep) -> Response:
     """409 while any question variant has the intent attached."""
     await container.run(container.build_delete_intent, DeleteIntentCommand(intent_id))

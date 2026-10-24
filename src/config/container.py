@@ -6,12 +6,16 @@ from typing import TYPE_CHECKING
 from qa_authoring.application.add_category.handler import AddCategoryHandler
 from qa_authoring.application.add_language_presence.handler import AddLanguagePresenceHandler
 from qa_authoring.application.add_question_variant.handler import AddQuestionVariantHandler
+from qa_authoring.application.assign_role.handler import AssignRoleHandler
 from qa_authoring.application.attach_intent.handler import AttachIntentHandler
 from qa_authoring.application.audio_upload import AudioUploader
+from qa_authoring.application.bootstrap_admin.handler import BootstrapAdminHandler
 from qa_authoring.application.create_project.handler import CreateProjectHandler
 from qa_authoring.application.create_protocol.handler import CreateProtocolHandler
 from qa_authoring.application.create_qaset.handler import CreateQASetHandler
+from qa_authoring.application.create_role.handler import CreateRoleHandler
 from qa_authoring.application.create_theme.handler import CreateThemeHandler
+from qa_authoring.application.create_user.handler import CreateUserHandler
 from qa_authoring.application.delete_answer_audio.handler import DeleteAnswerAudioHandler
 from qa_authoring.application.delete_category.handler import DeleteCategoryHandler
 from qa_authoring.application.delete_intent.handler import DeleteIntentHandler
@@ -20,6 +24,7 @@ from qa_authoring.application.delete_project.handler import DeleteProjectHandler
 from qa_authoring.application.delete_protocol.handler import DeleteProtocolHandler
 from qa_authoring.application.delete_qaset.handler import DeleteQASetHandler
 from qa_authoring.application.delete_question_variant.handler import DeleteQuestionVariantHandler
+from qa_authoring.application.delete_role.handler import DeleteRoleHandler
 from qa_authoring.application.delete_theme.handler import DeleteThemeHandler
 from qa_authoring.application.delete_variant_audio.handler import DeleteVariantAudioHandler
 from qa_authoring.application.detach_intent.handler import DetachIntentHandler
@@ -31,7 +36,9 @@ from qa_authoring.application.get_language.handler import GetLanguageHandler
 from qa_authoring.application.get_project.handler import GetProjectHandler
 from qa_authoring.application.get_protocol.handler import GetProtocolHandler
 from qa_authoring.application.get_qaset.handler import GetQASetHandler
+from qa_authoring.application.get_role.handler import GetRoleHandler
 from qa_authoring.application.get_theme.handler import GetThemeHandler
+from qa_authoring.application.get_user.handler import GetUserHandler
 from qa_authoring.application.link_answers.handler import LinkAnswersHandler
 from qa_authoring.application.link_variants.handler import LinkVariantsHandler
 from qa_authoring.application.list_categories.handler import ListCategoriesHandler
@@ -40,14 +47,18 @@ from qa_authoring.application.list_languages.handler import ListLanguagesHandler
 from qa_authoring.application.list_projects.handler import ListProjectsHandler
 from qa_authoring.application.list_protocols.handler import ListProtocolsHandler
 from qa_authoring.application.list_qasets.handler import ListQASetsHandler
+from qa_authoring.application.list_roles.handler import ListRolesHandler
 from qa_authoring.application.list_themes.handler import ListThemesHandler
+from qa_authoring.application.list_users.handler import ListUsersHandler
 from qa_authoring.application.register_category.handler import RegisterCategoryHandler
 from qa_authoring.application.register_intent.handler import RegisterIntentHandler
 from qa_authoring.application.register_language.handler import RegisterLanguageHandler
 from qa_authoring.application.remove_category.handler import RemoveCategoryHandler
 from qa_authoring.application.remove_language_presence.handler import RemoveLanguagePresenceHandler
+from qa_authoring.application.resolve_current_user.handler import ResolveCurrentUserHandler
 from qa_authoring.application.set_answer_audio.handler import SetAnswerAudioHandler
 from qa_authoring.application.set_variant_audio.handler import SetVariantAudioHandler
+from qa_authoring.application.unassign_role.handler import UnassignRoleHandler
 from qa_authoring.application.unlink_answers.handler import UnlinkAnswersHandler
 from qa_authoring.application.unlink_variants.handler import UnlinkVariantsHandler
 from qa_authoring.application.update_answer.handler import UpdateAnswerHandler
@@ -55,7 +66,9 @@ from qa_authoring.application.update_language.handler import UpdateLanguageHandl
 from qa_authoring.application.update_project.handler import UpdateProjectHandler
 from qa_authoring.application.update_protocol.handler import UpdateProtocolHandler
 from qa_authoring.application.update_question_variant.handler import UpdateQuestionVariantHandler
+from qa_authoring.application.update_role.handler import UpdateRoleHandler
 from qa_authoring.application.update_theme.handler import UpdateThemeHandler
+from qa_authoring.application.update_user.handler import UpdateUserHandler
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -262,3 +275,42 @@ class Container:
         return GetAudioPlaybackUrlHandler(
             uow.qasets, self._audio_storage, self._audio_policy, self._clock
         )
+
+    def build_create_user(self, uow: UnitOfWork) -> CreateUserHandler:
+        return CreateUserHandler(uow.users)
+
+    def build_list_users(self, uow: UnitOfWork) -> ListUsersHandler:
+        return ListUsersHandler(uow.users, uow.roles)
+
+    def build_get_user(self, uow: UnitOfWork) -> GetUserHandler:
+        return GetUserHandler(uow.users, uow.roles)
+
+    def build_update_user(self, uow: UnitOfWork) -> UpdateUserHandler:
+        return UpdateUserHandler(uow.users, uow.roles)
+
+    def build_assign_role(self, uow: UnitOfWork) -> AssignRoleHandler:
+        return AssignRoleHandler(uow.users, uow.roles)
+
+    def build_unassign_role(self, uow: UnitOfWork) -> UnassignRoleHandler:
+        return UnassignRoleHandler(uow.users, uow.roles)
+
+    def build_create_role(self, uow: UnitOfWork) -> CreateRoleHandler:
+        return CreateRoleHandler(uow.roles)
+
+    def build_list_roles(self, uow: UnitOfWork) -> ListRolesHandler:
+        return ListRolesHandler(uow.roles)
+
+    def build_get_role(self, uow: UnitOfWork) -> GetRoleHandler:
+        return GetRoleHandler(uow.roles)
+
+    def build_update_role(self, uow: UnitOfWork) -> UpdateRoleHandler:
+        return UpdateRoleHandler(uow.roles)
+
+    def build_delete_role(self, uow: UnitOfWork) -> DeleteRoleHandler:
+        return DeleteRoleHandler(uow.roles, uow.users)
+
+    def build_resolve_current_user(self, uow: UnitOfWork) -> ResolveCurrentUserHandler:
+        return ResolveCurrentUserHandler(uow.users, uow.roles)
+
+    def build_bootstrap_admin(self, uow: UnitOfWork) -> BootstrapAdminHandler:
+        return BootstrapAdminHandler(uow.users, uow.roles)

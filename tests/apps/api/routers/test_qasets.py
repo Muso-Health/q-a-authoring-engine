@@ -4,19 +4,19 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 
-from apps.api.app import create_app
-from tests.fakes import in_memory_container
+from tests.fakes import admin_client, in_memory_container
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from fastapi.testclient import TestClient
+
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    container, _ = in_memory_container()
-    with TestClient(create_app(container=container)) as client:
+    container, store = in_memory_container()
+    with admin_client(container, store) as client:
         yield client
 
 

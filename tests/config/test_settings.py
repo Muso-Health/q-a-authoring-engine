@@ -111,3 +111,22 @@ def test_audio_defaults_store_locally(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_audio_backend_must_be_known(monkeypatch: pytest.MonkeyPatch, backend: str) -> None:
     with pytest.raises(ValidationError):
         _settings(monkeypatch, AUDIO_STORAGE_BACKEND=backend)
+
+
+def test_auth_defaults_to_iap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("QA_AUTHORING_AUTH_PROVIDER", raising=False)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert (settings.auth_provider, settings.auth_iap_audience) == ("iap", "")
+    settings = _settings(monkeypatch, AUTH_IAP_AUDIENCE="/projects/1/global/backendServices/2")
+    assert settings.auth_iap_audience == "/projects/1/global/backendServices/2"
+
+
+def test_dev_auth_and_bootstrap_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings(monkeypatch, AUTH_PROVIDER="dev", BOOTSTRAP_ADMIN_EMAIL="root@example.org")
+    assert (settings.auth_provider, settings.bootstrap_admin_email) == ("dev", "root@example.org")
+
+
+@pytest.mark.parametrize("provider", ["", "oauth", "DEV"])
+def test_auth_provider_must_be_known(monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
+    with pytest.raises(ValidationError):
+        _settings(monkeypatch, AUTH_PROVIDER=provider)

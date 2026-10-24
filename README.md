@@ -63,10 +63,15 @@ file (git-ignored). Every variable has a development default.
 | `QA_AUTHORING_AUDIO_MAX_UPLOAD_BYTES` | `10485760` | Largest accepted upload (10 MiB). |
 | `QA_AUTHORING_AUDIO_ALLOWED_MIME_TYPES` | `audio/webm,audio/ogg,audio/wav,audio/mpeg,audio/mp4` | Comma-separated whitelist, checked against the type detected from the bytes (not the type the client claims). |
 | `QA_AUTHORING_AUDIO_FFPROBE_PATH` | `ffprobe` | Path to the `ffprobe` binary. |
+| `QA_AUTHORING_AUTH_PROVIDER` | `iap` | How callers are identified: `iap` (Google Identity-Aware Proxy's signed assertion) or `dev` (a plain `X-Dev-User: <email>` header; **local development only**, as anyone can claim any identity with it). |
+| `QA_AUTHORING_AUTH_IAP_AUDIENCE` | *(empty)* | The IAP audience (`/projects/<number>/global/backendServices/<id>` or `/projects/<number>/apps/<project-id>`). Required with `iap`; the API refuses to start without it. |
+| `QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL` | *(empty)* | When set, every startup ensures an `admin` role holding every permission, and an active user with this email holding it. |
 
 Example `.env` for local development:
 
 ```dotenv
+QA_AUTHORING_AUTH_PROVIDER=dev
+QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL=you@example.org
 QA_AUTHORING_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/qa_authoring
 QA_AUTHORING_CORS_ALLOWED_ORIGINS=http://localhost:4200
 ```
@@ -94,6 +99,12 @@ PYTHONPATH=src uvicorn main:app --reload
 ```
 
 The liveness probe is `GET /health`, and interactive API docs are served at `/docs`.
+
+Every other endpoint requires an authenticated, **provisioned** user: the identity's email must
+belong to an active user created by an administrator (no self-sign-up). Reads need nothing more;
+each write needs a permission from the fixed catalogue (`GET /permissions`), granted through
+roles. `GET /me` returns the current user's effective permissions. To get in the first time,
+set `QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL`; with the `dev` provider, send `X-Dev-User: <that email>`.
 
 To run it in Docker instead (ffmpeg included):
 

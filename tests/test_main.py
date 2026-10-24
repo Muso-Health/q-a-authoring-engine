@@ -13,6 +13,8 @@ def test_entrypoint_exposes_an_app_that_serves_health(monkeypatch: pytest.Monkey
     """``uvicorn main:app`` is the entrypoint. The engine is lazy, so
     startup builds the container without dialling the (unreachable) database."""
     monkeypatch.setenv("QA_AUTHORING_DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:1/none")
+    monkeypatch.setenv("QA_AUTHORING_AUTH_PROVIDER", "dev")
+    monkeypatch.delenv("QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL", raising=False)
     main = importlib.import_module("main")
 
     with TestClient(main.app) as client:

@@ -6,11 +6,20 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Self
 
+from fastapi.testclient import TestClient
+
+from apps.api.app import create_app
 from config.container import Container
 from qa_authoring.application.audio_policy import AudioPolicy
 from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAudioError
+from qa_authoring.application.role_errors import RoleInUseError, RoleNameExistsError
+from qa_authoring.application.user_errors import EmailAlreadyExistsError
 from qa_authoring.domain.model.intent import normalize_intent_text
+from qa_authoring.domain.model.permission import Permission
+from qa_authoring.domain.model.role import Role
+from qa_authoring.domain.model.user import User
 from qa_authoring.domain.value_objects.naming import normalize_key
+from qa_authoring.infrastructure.auth.dev import DevIdentityProvider
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -23,7 +32,9 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
+    from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
+    from qa_authoring.application.ports.user_repository import UserRepository
     from qa_authoring.domain.model.category import Category
     from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
@@ -230,6 +241,75 @@ class InMemoryCategoryRepository:
         self.rows.pop(category_id, None)
 
 
+class InMemoryRoleRepository:
+    """Enforces the unique normalized name and the in-use guard, like the database."""
+
+    def __init__(self) -> None:
+        self.rows: dict[UUID, Role] = {}
+        self.users: InMemoryUserRepository | None = None
+
+    async def add(self, role: Role) -> None:
+        self._check_name(role)
+        self.rows[role.id] = deepcopy(role)
+
+    async def get(self, role_id: UUID) -> Role | None:
+        row = self.rows.get(role_id)
+        return None if row is None else deepcopy(row)
+
+    async def get_many(self, role_ids: set[UUID]) -> dict[UUID, Role]:
+        return {i: deepcopy(self.rows[i]) for i in role_ids if i in self.rows}
+
+    async def find_by_key(self, key: str) -> Role | None:
+        row = next((r for r in self.rows.values() if r.key == key), None)
+        return None if row is None else deepcopy(row)
+
+    async def list(self) -> tuple[Role, ...]:
+        return tuple(deepcopy(r) for r in sorted(self.rows.values(), key=lambda r: r.key))
+
+    async def update(self, role: Role) -> None:
+        self._check_name(role)
+        self.rows[role.id] = deepcopy(role)
+
+    async def delete(self, role_id: UUID) -> None:
+        if self.users is not None and await self.users.uses_role(role_id):
+            raise RoleInUseError(role_id)
+        self.rows.pop(role_id, None)
+
+    def _check_name(self, role: Role) -> None:
+        if any(r.key == role.key and r.id != role.id for r in self.rows.values()):
+            raise RoleNameExistsError(role.name)
+
+
+class InMemoryUserRepository:
+    """Enforces the unique email, like the database."""
+
+    def __init__(self) -> None:
+        self.rows: dict[UUID, User] = {}
+
+    async def add(self, user: User) -> None:
+        if any(u.email == user.email for u in self.rows.values()):
+            raise EmailAlreadyExistsError(user.email)
+        self.rows[user.id] = deepcopy(user)
+
+    async def get(self, user_id: UUID) -> User | None:
+        row = self.rows.get(user_id)
+        return None if row is None else deepcopy(row)
+
+    async def find_by_email(self, email: str) -> User | None:
+        wanted = email.strip().lower()
+        row = next((u for u in self.rows.values() if u.email == wanted), None)
+        return None if row is None else deepcopy(row)
+
+    async def list(self) -> tuple[User, ...]:
+        return tuple(deepcopy(u) for u in sorted(self.rows.values(), key=lambda u: u.email))
+
+    async def update(self, user: User) -> None:
+        self.rows[user.id] = deepcopy(user)
+
+    async def uses_role(self, role_id: UUID) -> bool:
+        return any(role_id in u.role_ids for u in self.rows.values())
+
+
 class InMemoryAudioStorage:
     def __init__(self) -> None:
         self.blobs: dict[str, bytes] = {}
@@ -281,9 +361,12 @@ class InMemoryStore:
     categories: InMemoryCategoryRepository = field(default_factory=InMemoryCategoryRepository)
     audio_storage: InMemoryAudioStorage = field(default_factory=InMemoryAudioStorage)
     audio_probe: FakeAudioProbe = field(default_factory=FakeAudioProbe)
+    users: InMemoryUserRepository = field(default_factory=InMemoryUserRepository)
+    roles: InMemoryRoleRepository = field(default_factory=InMemoryRoleRepository)
     events: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        self.roles.users = self.users
         # One timeline across storage, repository and commits, to assert their ordering.
         self.qasets.events = self.events
         self.audio_storage.events = self.events
@@ -297,6 +380,8 @@ class InMemoryUnitOfWork:
     qasets: QASetRepository
     intents: IntentRepository
     categories: CategoryRepository
+    users: UserRepository
+    roles: RoleRepository
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -306,6 +391,8 @@ class InMemoryUnitOfWork:
         self.qasets = store.qasets
         self.intents = store.intents
         self.categories = store.categories
+        self.users = store.users
+        self.roles = store.roles
         self._events = store.events
         self._after_commit: list[Callable[[], Awaitable[None]]] = []
 
@@ -339,3 +426,24 @@ def in_memory_container() -> tuple[Container, InMemoryStore]:
         clock=lambda: NOW,
     )
     return container, store
+
+
+ADMIN_EMAIL = "admin@example.org"
+
+
+def seed_user(store: InMemoryStore, email: str, *permissions: Permission) -> User:
+    """An active user holding ``permissions`` through a role of their own."""
+    user = User.create(email=email, display_name=email.split("@")[0])
+    if permissions:
+        role = Role.create(name=f"role for {email}", permissions=permissions)
+        store.roles.rows[role.id] = role
+        user.assign_role(role.id)
+    store.users.rows[user.id] = user
+    return user
+
+
+def admin_client(container: Container, store: InMemoryStore) -> TestClient:
+    """A client authenticated (dev provider) as a user holding every permission."""
+    seed_user(store, ADMIN_EMAIL, *Permission)
+    app = create_app(container=container, identity_provider=DevIdentityProvider())
+    return TestClient(app, headers={"X-Dev-User": ADMIN_EMAIL})

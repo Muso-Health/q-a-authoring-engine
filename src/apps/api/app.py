@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.auth import require_authenticated
 from apps.api.errors import register_error_handlers
+from apps.api.routers.access import router as access_router
 from apps.api.routers.audio import router as audio_router
 from apps.api.routers.categories import router as categories_router
 from apps.api.routers.health import router as health_router
@@ -14,7 +16,9 @@ from apps.api.routers.languages import router as languages_router
 from apps.api.routers.projects import router as projects_router
 from apps.api.routers.protocols import router as protocols_router
 from apps.api.routers.qasets import router as qasets_router
+from apps.api.routers.roles import router as roles_router
 from apps.api.routers.themes import router as themes_router
+from apps.api.routers.users import router as users_router
 from apps.api.version import API_VERSION
 
 if TYPE_CHECKING:
@@ -23,11 +27,13 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from config.container import Container
+    from qa_authoring.application.ports.identity import IdentityProvider
 
 
 def create_app(
     *,
     container: Container | None = None,
+    identity_provider: IdentityProvider | None = None,
     cors_allowed_origins: Sequence[str] = (),
     lifespan: Lifespan[FastAPI] | None = None,
 ) -> FastAPI:
@@ -38,10 +44,15 @@ def create_app(
     path ``main.py`` takes, because the engine (and a Cloud SQL Connector) must be created on the
     serving event loop. ``cors_allowed_origins`` (the Angular SPA's origins) turns on CORS when
     non-empty.
+
+    Every route but ``/health`` requires an authenticated, active user (from
+    ``identity_provider``; none means every such request is unauthenticated); writes also
+    require their permission, declared on the route.
     """
     app = FastAPI(title="Muso Q&A Authoring Engine API", version=API_VERSION, lifespan=lifespan)
     if container is not None:
         app.state.container = container
+    app.state.identity_provider = identity_provider
     if cors_allowed_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -51,8 +62,11 @@ def create_app(
             allow_credentials=False,
         )
     register_error_handlers(app)
+    app.include_router(health_router)
     for router in (
-        health_router,
+        access_router,
+        users_router,
+        roles_router,
         languages_router,
         projects_router,
         protocols_router,
@@ -62,5 +76,5 @@ def create_app(
         categories_router,
         audio_router,
     ):
-        app.include_router(router)
+        app.include_router(router, dependencies=[Depends(require_authenticated)])
     return app

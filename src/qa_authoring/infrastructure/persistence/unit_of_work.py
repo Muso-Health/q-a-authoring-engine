@@ -15,7 +15,9 @@ from qa_authoring.infrastructure.persistence.repositories.protocol import (
     PostgresProtocolRepository,
 )
 from qa_authoring.infrastructure.persistence.repositories.qaset import PostgresQASetRepository
+from qa_authoring.infrastructure.persistence.repositories.role import PostgresRoleRepository
 from qa_authoring.infrastructure.persistence.repositories.theme import PostgresThemeRepository
+from qa_authoring.infrastructure.persistence.repositories.user import PostgresUserRepository
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -29,7 +31,9 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
+    from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
+    from qa_authoring.application.ports.user_repository import UserRepository
 
 _log = logging.getLogger(__name__)
 
@@ -45,6 +49,8 @@ class SqlAlchemyUnitOfWork:
     qasets: QASetRepository
     intents: IntentRepository
     categories: CategoryRepository
+    users: UserRepository
+    roles: RoleRepository
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -65,6 +71,8 @@ class SqlAlchemyUnitOfWork:
         self.qasets = PostgresQASetRepository(self._connection)
         self.intents = PostgresIntentRepository(self._connection)
         self.categories = PostgresCategoryRepository(self._connection)
+        self.users = PostgresUserRepository(self._connection)
+        self.roles = PostgresRoleRepository(self._connection)
         return self
 
     async def __aexit__(

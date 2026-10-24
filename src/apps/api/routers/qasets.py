@@ -5,6 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
+from apps.api.auth import requires
 from apps.api.dependencies import get_container
 from apps.api.schemas.qasets import (
     AddCategoryRequest,
@@ -45,6 +46,7 @@ from qa_authoring.application.update_answer.command import UpdateAnswerCommand
 from qa_authoring.application.update_question_variant.command import (
     UpdateQuestionVariantCommand,
 )
+from qa_authoring.domain.model.permission import Permission
 
 router = APIRouter(tags=["qasets"])
 
@@ -55,7 +57,11 @@ def _no_content() -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/themes/{theme_id}/qasets", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/themes/{theme_id}/qasets",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def create_qaset(
     theme_id: UUID, body: AnswerInLanguageRequest, container: ContainerDep
 ) -> QASetResponse:
@@ -79,14 +85,22 @@ async def get_qaset(qaset_id: UUID, container: ContainerDep) -> QASetResponse:
     return QASetResponse.of(await container.run(container.build_get_qaset, query))
 
 
-@router.delete("/qasets/{qaset_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/qasets/{qaset_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def delete_qaset(qaset_id: UUID, container: ContainerDep) -> Response:
     """Deletes the QA set together with its answers and question variants."""
     await container.run(container.build_delete_qaset, DeleteQASetCommand(qaset_id))
     return _no_content()
 
 
-@router.post("/qasets/{qaset_id}/languages", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/qasets/{qaset_id}/languages",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def add_language_presence(
     qaset_id: UUID, body: AnswerInLanguageRequest, container: ContainerDep
 ) -> LanguagePresenceResponse:
@@ -98,7 +112,9 @@ async def add_language_presence(
     return LanguagePresenceResponse.of(result)
 
 
-@router.patch("/qasets/{qaset_id}/languages/{language_id}")
+@router.patch(
+    "/qasets/{qaset_id}/languages/{language_id}", dependencies=[requires(Permission.AUTHOR_QASETS)]
+)
 async def update_answer(
     qaset_id: UUID, language_id: UUID, body: TextRequest, container: ContainerDep
 ) -> LanguagePresenceResponse:
@@ -107,7 +123,11 @@ async def update_answer(
     return LanguagePresenceResponse.of(await container.run(container.build_update_answer, command))
 
 
-@router.delete("/qasets/{qaset_id}/languages/{language_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/qasets/{qaset_id}/languages/{language_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def remove_language_presence(
     qaset_id: UUID, language_id: UUID, container: ContainerDep
 ) -> Response:
@@ -118,7 +138,9 @@ async def remove_language_presence(
 
 
 @router.post(
-    "/qasets/{qaset_id}/languages/{language_id}/variants", status_code=status.HTTP_201_CREATED
+    "/qasets/{qaset_id}/languages/{language_id}/variants",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
 )
 async def add_question_variant(
     qaset_id: UUID, language_id: UUID, body: TextRequest, container: ContainerDep
@@ -129,7 +151,9 @@ async def add_question_variant(
     return QuestionVariantResponse.of(result)
 
 
-@router.patch("/qasets/{qaset_id}/variants/{variant_id}")
+@router.patch(
+    "/qasets/{qaset_id}/variants/{variant_id}", dependencies=[requires(Permission.AUTHOR_QASETS)]
+)
 async def update_question_variant(
     qaset_id: UUID, variant_id: UUID, body: TextRequest, container: ContainerDep
 ) -> QuestionVariantResponse:
@@ -138,7 +162,11 @@ async def update_question_variant(
     return QuestionVariantResponse.of(result)
 
 
-@router.delete("/qasets/{qaset_id}/variants/{variant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/qasets/{qaset_id}/variants/{variant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def delete_question_variant(
     qaset_id: UUID, variant_id: UUID, container: ContainerDep
 ) -> Response:
@@ -147,7 +175,11 @@ async def delete_question_variant(
     return _no_content()
 
 
-@router.post("/qasets/{qaset_id}/answer-links", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/qasets/{qaset_id}/answer-links",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def link_answers(
     qaset_id: UUID, body: LinkAnswersRequest, container: ContainerDep
 ) -> AnswerLinkResponse:
@@ -158,13 +190,21 @@ async def link_answers(
     return AnswerLinkResponse.of(await container.run(container.build_link_answers, command))
 
 
-@router.delete("/qasets/{qaset_id}/answer-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/qasets/{qaset_id}/answer-links/{link_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def unlink_answers(qaset_id: UUID, link_id: UUID, container: ContainerDep) -> Response:
     await container.run(container.build_unlink_answers, UnlinkAnswersCommand(qaset_id, link_id))
     return _no_content()
 
 
-@router.post("/qasets/{qaset_id}/variant-links", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/qasets/{qaset_id}/variant-links",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def link_variants(
     qaset_id: UUID, body: LinkVariantsRequest, container: ContainerDep
 ) -> VariantLinkResponse:
@@ -175,14 +215,20 @@ async def link_variants(
     return VariantLinkResponse.of(await container.run(container.build_link_variants, command))
 
 
-@router.delete("/qasets/{qaset_id}/variant-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/qasets/{qaset_id}/variant-links/{link_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def unlink_variants(qaset_id: UUID, link_id: UUID, container: ContainerDep) -> Response:
     await container.run(container.build_unlink_variants, UnlinkVariantsCommand(qaset_id, link_id))
     return _no_content()
 
 
 @router.post(
-    "/qasets/{qaset_id}/variants/{variant_id}/intents", status_code=status.HTTP_201_CREATED
+    "/qasets/{qaset_id}/variants/{variant_id}/intents",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
 )
 async def attach_intent(
     qaset_id: UUID,
@@ -205,6 +251,7 @@ async def attach_intent(
 @router.delete(
     "/qasets/{qaset_id}/variants/{variant_id}/intents/{intent_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
 )
 async def detach_intent(
     qaset_id: UUID, variant_id: UUID, intent_id: UUID, container: ContainerDep
@@ -215,7 +262,11 @@ async def detach_intent(
     return _no_content()
 
 
-@router.post("/qasets/{qaset_id}/categories", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/qasets/{qaset_id}/categories",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
+)
 async def add_category(
     qaset_id: UUID, body: AddCategoryRequest, response: Response, container: ContainerDep
 ) -> QASetResponse:
@@ -229,7 +280,9 @@ async def add_category(
 
 
 @router.delete(
-    "/qasets/{qaset_id}/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT
+    "/qasets/{qaset_id}/categories/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.AUTHOR_QASETS)],
 )
 async def remove_category(qaset_id: UUID, category_id: UUID, container: ContainerDep) -> Response:
     """404 ``category_not_attached`` if the QA set does not carry the category."""

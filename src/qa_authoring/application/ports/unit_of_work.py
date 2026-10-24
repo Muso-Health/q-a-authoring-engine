@@ -12,7 +12,9 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
+    from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
+    from qa_authoring.application.ports.user_repository import UserRepository
 
 
 class UnitOfWork(Protocol):
@@ -26,6 +28,8 @@ class UnitOfWork(Protocol):
     qasets: QASetRepository
     intents: IntentRepository
     categories: CategoryRepository
+    users: UserRepository
+    roles: RoleRepository
 
     def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
         """Run ``action`` once the transaction has committed; best-effort, never rolled back.

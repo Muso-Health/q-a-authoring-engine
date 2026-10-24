@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from qa_authoring.application.access_errors import PermissionDeniedError
 from qa_authoring.application.audio_errors import (
     AudioNotFoundError,
     AudioTooLargeError,
@@ -20,6 +21,7 @@ from qa_authoring.application.language_errors import (
     LanguageInUseError,
     LanguageNotFoundError,
 )
+from qa_authoring.application.ports.identity import UnauthenticatedError
 from qa_authoring.application.project_errors import (
     ProjectHasProtocolsError,
     ProjectNotFoundError,
@@ -30,8 +32,20 @@ from qa_authoring.application.protocol_errors import (
     ProtocolNotFoundError,
 )
 from qa_authoring.application.qaset_errors import QASetNotFoundError, UnknownLanguageError
+from qa_authoring.application.role_errors import (
+    RoleInUseError,
+    RoleNameExistsError,
+    RoleNotFoundError,
+)
 from qa_authoring.application.theme_errors import ThemeHasQASetsError, ThemeNotFoundError
+from qa_authoring.application.user_errors import (
+    EmailAlreadyExistsError,
+    NotProvisionedError,
+    RoleNotAssignedError,
+    UserNotFoundError,
+)
 from qa_authoring.domain.model.language import InvalidLanguageNameError
+from qa_authoring.domain.model.permission import UnknownPermissionError
 from qa_authoring.domain.model.qaset import (
     AnswerNotFoundError,
     CategoryNotAttachedError,
@@ -46,6 +60,7 @@ from qa_authoring.domain.model.qaset import (
     SelfLinkError,
     TranslationLinkNotFoundError,
 )
+from qa_authoring.domain.model.user import InvalidEmailError
 from qa_authoring.domain.value_objects.language_code import InvalidLanguageCodeError
 from qa_authoring.domain.value_objects.naming import InvalidNameError, InvalidTextError
 
@@ -62,6 +77,17 @@ class _Rule:
 # Every domain/application error a client can receive, mapped to an HTTP status and a stable
 # machine code. An unmapped error is a 500.
 _RULES: dict[type[Exception], _Rule] = {
+    UnauthenticatedError: _Rule(401, "unauthenticated"),
+    NotProvisionedError: _Rule(403, "not_provisioned"),
+    PermissionDeniedError: _Rule(403, "permission_denied"),
+    UserNotFoundError: _Rule(404, "user_not_found"),
+    RoleNotFoundError: _Rule(404, "role_not_found"),
+    RoleNotAssignedError: _Rule(404, "role_not_assigned"),
+    RoleInUseError: _Rule(409, "role_in_use"),
+    EmailAlreadyExistsError: _Rule(409, "email_already_exists"),
+    RoleNameExistsError: _Rule(409, "role_name_exists"),
+    UnknownPermissionError: _Rule(422, "unknown_permission"),
+    InvalidEmailError: _Rule(422, "invalid_email"),
     LanguageNotFoundError: _Rule(404, "language_not_found"),
     ProjectNotFoundError: _Rule(404, "project_not_found"),
     ProtocolNotFoundError: _Rule(404, "protocol_not_found"),

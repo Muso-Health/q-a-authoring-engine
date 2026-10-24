@@ -5,6 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
+from apps.api.auth import requires
 from apps.api.dependencies import get_container
 from apps.api.schemas.catalog import (
     CreateNamedRequest,
@@ -18,13 +19,18 @@ from qa_authoring.application.delete_theme.command import DeleteThemeCommand
 from qa_authoring.application.get_theme.command import GetThemeQuery
 from qa_authoring.application.list_themes.command import ListThemesQuery
 from qa_authoring.application.update_theme.command import UpdateThemeCommand
+from qa_authoring.domain.model.permission import Permission
 
 router = APIRouter(tags=["themes"])
 
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-@router.post("/protocols/{protocol_id}/themes", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/protocols/{protocol_id}/themes",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[requires(Permission.MANAGE_CATALOG)],
+)
 async def create_theme(
     protocol_id: UUID, body: CreateNamedRequest, container: ContainerDep
 ) -> ThemeResponse:
@@ -47,7 +53,7 @@ async def get_theme(theme_id: UUID, container: ContainerDep) -> ThemeResponse:
     return ThemeResponse.of(await container.run(container.build_get_theme, query))
 
 
-@router.patch("/themes/{theme_id}")
+@router.patch("/themes/{theme_id}", dependencies=[requires(Permission.MANAGE_CATALOG)])
 async def update_theme(
     theme_id: UUID, body: UpdateNamedRequest, container: ContainerDep
 ) -> ThemeResponse:
@@ -55,7 +61,11 @@ async def update_theme(
     return ThemeResponse.of(await container.run(container.build_update_theme, command))
 
 
-@router.delete("/themes/{theme_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/themes/{theme_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[requires(Permission.MANAGE_CATALOG)],
+)
 async def delete_theme(theme_id: UUID, container: ContainerDep) -> Response:
     await container.run(container.build_delete_theme, DeleteThemeCommand(theme_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
