@@ -21,6 +21,7 @@ dependencies = [
     "asyncpg",
     "alembic",
     "cloud-sql-python-connector[asyncpg]",
+    "pyjwt[crypto]",
     "python-multipart",
     "google-cloud-storage",
 ]

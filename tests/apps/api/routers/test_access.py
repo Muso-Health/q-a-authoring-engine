@@ -40,7 +40,7 @@ def test_permissions_lists_the_catalogue(client: TestClient) -> None:
 
 def test_me(client: TestClient) -> None:
     me = _ok(client.get("/me"), 200)
-    assert set(me) == {"id", "email", "display_name", "permissions"}
+    assert set(me) == {"id", "email", "display_name", "permissions"}  # never the subject (oid)
     assert me["email"] == ADMIN_EMAIL
     assert me["permissions"] == sorted(p.value for p in Permission)
 
@@ -126,3 +126,14 @@ def test_user_errors(client: TestClient) -> None:
         "user_not_found",
     )
     _error(client.post("/users", json={"email": "x@example.org"}), 422, "invalid_request")
+
+
+def test_the_identity_subject_is_never_exposed(client: TestClient) -> None:
+    created = _ok(client.post("/users", json={"email": "a@example.org", "display_name": "A"}))
+    bodies = [
+        _ok(client.get("/me"), 200),
+        created,
+        _ok(client.get(f"/users/{created['id']}"), 200),
+        *_ok(client.get("/users"), 200)["items"],
+    ]
+    assert all("subject" not in body and "oid" not in body for body in bodies)

@@ -55,12 +55,13 @@ class Settings(BaseSettings):
     audio_allowed_mime_types: str = "audio/webm,audio/ogg,audio/wav,audio/mpeg,audio/mp4"
     audio_ffprobe_path: str = "ffprobe"
 
-    # Authentication. "iap" verifies Google IAP's signed assertion for ``auth_iap_audience``
-    # (required then); "dev" trusts a plain X-Dev-User header and must never face the internet.
-    # ``bootstrap_admin_email``, when set, is ensured an active admin holding every permission
-    # at startup.
-    auth_provider: str = "iap"
-    auth_iap_audience: str = ""
+    # Authentication. "entra" validates Microsoft Entra ID bearer tokens issued by
+    # ``auth_entra_tenant`` for ``auth_entra_audience`` (both required then); "dev" trusts a plain
+    # X-Dev-User header and must never face the internet. ``bootstrap_admin_email``, when set, is
+    # ensured an active admin holding every permission at startup.
+    auth_provider: str = "entra"
+    auth_entra_audience: str = ""
+    auth_entra_tenant: str = ""
     bootstrap_admin_email: str = ""
 
     @field_validator("db_schema")
@@ -80,8 +81,8 @@ class Settings(BaseSettings):
     @field_validator("auth_provider")
     @classmethod
     def _known_auth_provider(cls, value: str) -> str:
-        if value not in {"iap", "dev"}:
-            raise ValueError("auth_provider must be 'iap' or 'dev'")
+        if value not in {"entra", "dev"}:
+            raise ValueError("auth_provider must be 'entra' or 'dev'")
         return value
 
     @property

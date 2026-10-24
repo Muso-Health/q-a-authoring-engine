@@ -113,12 +113,16 @@ def test_audio_backend_must_be_known(monkeypatch: pytest.MonkeyPatch, backend: s
         _settings(monkeypatch, AUDIO_STORAGE_BACKEND=backend)
 
 
-def test_auth_defaults_to_iap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_auth_defaults_to_entra(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("QA_AUTHORING_AUTH_PROVIDER", raising=False)
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert (settings.auth_provider, settings.auth_iap_audience) == ("iap", "")
-    settings = _settings(monkeypatch, AUTH_IAP_AUDIENCE="/projects/1/global/backendServices/2")
-    assert settings.auth_iap_audience == "/projects/1/global/backendServices/2"
+    assert (settings.auth_provider, settings.auth_entra_audience, settings.auth_entra_tenant) == (
+        "entra",
+        "",
+        "",
+    )
+    settings = _settings(monkeypatch, AUTH_ENTRA_AUDIENCE="api://qa", AUTH_ENTRA_TENANT="t-id")
+    assert (settings.auth_entra_audience, settings.auth_entra_tenant) == ("api://qa", "t-id")
 
 
 def test_dev_auth_and_bootstrap_admin(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +130,7 @@ def test_dev_auth_and_bootstrap_admin(monkeypatch: pytest.MonkeyPatch) -> None:
     assert (settings.auth_provider, settings.bootstrap_admin_email) == ("dev", "root@example.org")
 
 
-@pytest.mark.parametrize("provider", ["", "oauth", "DEV"])
+@pytest.mark.parametrize("provider", ["", "iap", "oauth", "DEV", "ENTRA"])
 def test_auth_provider_must_be_known(monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
     with pytest.raises(ValidationError):
         _settings(monkeypatch, AUTH_PROVIDER=provider)
