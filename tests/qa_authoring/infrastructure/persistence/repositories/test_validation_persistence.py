@@ -205,3 +205,41 @@ async def test_find_qaset_by_item(migrated_engine: AsyncEngine) -> None:
     assert by_answer is not None
     assert by_variant is not None
     assert by_answer.id == by_variant.id == world.qaset.id
+
+
+async def test_a_reset_to_pending_round_trips(migrated_engine: AsyncEngine) -> None:
+    world = await _world(migrated_engine)
+    clinical = _subjects(world)[0]
+    await _record(migrated_engine, world, clinical)
+
+    async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
+        loaded = await uow.validations.get_for(clinical)
+        assert loaded is not None
+        loaded.reset(actor_user_id=world.actor, at=T0 + timedelta(hours=1))
+        await uow.validations.save(loaded)
+
+    async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
+        reloaded = await uow.validations.get_for(clinical)
+        states = await uow.validations.current_states({clinical})
+    assert reloaded is not None
+    assert reloaded.current_state is ValidationState.PENDING
+    assert [(e.from_state, e.to_state, e.note) for e in reloaded.events] == [
+        (None, ValidationState.VALIDATED, "first"),
+        (ValidationState.VALIDATED, ValidationState.PENDING, "content changed"),
+    ]
+    assert states == {clinical: ValidationState.PENDING}
+
+
+async def test_a_history_cannot_start_with_pending(migrated_engine: AsyncEngine) -> None:
+    world = await _world(migrated_engine)
+    validation = await _record(migrated_engine, world, _subjects(world)[0])
+    with pytest.raises(IntegrityError, match="ck_validation_events_states"):
+        async with migrated_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO validation_events (id, validation_id, sequence, from_state, "
+                    "to_state, actor_user_id, occurred_at) "
+                    "VALUES (:id, :validation_id, 2, NULL, 'pending', :actor, now())"
+                ),
+                {"id": uuid4(), "validation_id": validation.id, "actor": world.actor},
+            )

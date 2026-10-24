@@ -9,3 +9,4 @@ class UpdateQuestionVariantCommand:
     qaset_id: UUID
     variant_id: UUID
     text: str
+    actor_user_id: UUID

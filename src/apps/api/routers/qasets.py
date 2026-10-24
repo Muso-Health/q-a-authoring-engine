@@ -5,7 +5,10 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
-from apps.api.auth import requires
+from apps.api.auth import (
+    CurrentUser,
+    requires,
+)
 from apps.api.dependencies import get_container
 from apps.api.schemas.qasets import (
     AddCategoryRequest,
@@ -116,10 +119,12 @@ async def add_language_presence(
     "/qasets/{qaset_id}/languages/{language_id}", dependencies=[requires(Permission.AUTHOR_QASETS)]
 )
 async def update_answer(
-    qaset_id: UUID, language_id: UUID, body: TextRequest, container: ContainerDep
+    qaset_id: UUID, language_id: UUID, body: TextRequest, user: CurrentUser, container: ContainerDep
 ) -> LanguagePresenceResponse:
     """Edit the answer text in a language present in the QA set."""
-    command = UpdateAnswerCommand(qaset_id=qaset_id, language_id=language_id, text=body.text)
+    command = UpdateAnswerCommand(
+        qaset_id=qaset_id, language_id=language_id, text=body.text, actor_user_id=user.id
+    )
     return LanguagePresenceResponse.of(await container.run(container.build_update_answer, command))
 
 
@@ -129,10 +134,12 @@ async def update_answer(
     dependencies=[requires(Permission.AUTHOR_QASETS)],
 )
 async def remove_language_presence(
-    qaset_id: UUID, language_id: UUID, container: ContainerDep
+    qaset_id: UUID, language_id: UUID, user: CurrentUser, container: ContainerDep
 ) -> Response:
     """Remove a language's answer and all its question variants."""
-    command = RemoveLanguagePresenceCommand(qaset_id=qaset_id, language_id=language_id)
+    command = RemoveLanguagePresenceCommand(
+        qaset_id=qaset_id, language_id=language_id, actor_user_id=user.id
+    )
     await container.run(container.build_remove_language_presence, command)
     return _no_content()
 
@@ -143,10 +150,12 @@ async def remove_language_presence(
     dependencies=[requires(Permission.AUTHOR_QASETS)],
 )
 async def add_question_variant(
-    qaset_id: UUID, language_id: UUID, body: TextRequest, container: ContainerDep
+    qaset_id: UUID, language_id: UUID, body: TextRequest, user: CurrentUser, container: ContainerDep
 ) -> QuestionVariantResponse:
     """409 if the language has no answer in this QA set yet."""
-    command = AddQuestionVariantCommand(qaset_id=qaset_id, language_id=language_id, text=body.text)
+    command = AddQuestionVariantCommand(
+        qaset_id=qaset_id, language_id=language_id, text=body.text, actor_user_id=user.id
+    )
     result = await container.run(container.build_add_question_variant, command)
     return QuestionVariantResponse.of(result)
 
@@ -155,9 +164,11 @@ async def add_question_variant(
     "/qasets/{qaset_id}/variants/{variant_id}", dependencies=[requires(Permission.AUTHOR_QASETS)]
 )
 async def update_question_variant(
-    qaset_id: UUID, variant_id: UUID, body: TextRequest, container: ContainerDep
+    qaset_id: UUID, variant_id: UUID, body: TextRequest, user: CurrentUser, container: ContainerDep
 ) -> QuestionVariantResponse:
-    command = UpdateQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id, text=body.text)
+    command = UpdateQuestionVariantCommand(
+        qaset_id=qaset_id, variant_id=variant_id, text=body.text, actor_user_id=user.id
+    )
     result = await container.run(container.build_update_question_variant, command)
     return QuestionVariantResponse.of(result)
 
@@ -168,9 +179,11 @@ async def update_question_variant(
     dependencies=[requires(Permission.AUTHOR_QASETS)],
 )
 async def delete_question_variant(
-    qaset_id: UUID, variant_id: UUID, container: ContainerDep
+    qaset_id: UUID, variant_id: UUID, user: CurrentUser, container: ContainerDep
 ) -> Response:
-    command = DeleteQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id)
+    command = DeleteQuestionVariantCommand(
+        qaset_id=qaset_id, variant_id=variant_id, actor_user_id=user.id
+    )
     await container.run(container.build_delete_question_variant, command)
     return _no_content()
 

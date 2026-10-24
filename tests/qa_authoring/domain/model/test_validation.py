@@ -142,3 +142,65 @@ def test_rehydrate_checks_the_history_chain() -> None:
     ):
         with pytest.raises(InvalidValidationHistoryError):
             Validation(validation.id, validation.subject, broken)
+
+
+def test_reset_returns_to_pending_and_keeps_the_history() -> None:
+    validation = Validation.start(
+        ValidationSubject.for_qaset(uuid4()), ValidationState.VALIDATED, actor_user_id=ALICE, at=T0
+    )
+    before = validation.events
+
+    event = validation.reset(actor_user_id=BOB, at=T0 + timedelta(minutes=5))
+
+    assert event is not None
+    assert validation.current_state is ValidationState.PENDING
+    assert (event.from_state, event.to_state, event.actor_user_id, event.note) == (
+        ValidationState.VALIDATED,
+        ValidationState.PENDING,
+        BOB,
+        "content changed",
+    )
+    assert validation.events[: len(before)] == before
+    assert [e.sequence for e in validation.events] == [1, 2]
+
+
+def test_reset_of_a_pending_validation_is_a_no_op() -> None:
+    validation = Validation.start(
+        ValidationSubject.for_answer(uuid4()), ValidationState.REJECTED, actor_user_id=ALICE, at=T0
+    )
+    validation.reset(actor_user_id=BOB, at=T0)
+    assert validation.reset(actor_user_id=BOB, at=T0) is None
+    assert len(validation.events) == 2
+
+
+def test_a_reset_validation_can_be_decided_again() -> None:
+    validation = Validation.start(
+        ValidationSubject.for_variant(uuid4()),
+        ValidationState.VALIDATED,
+        actor_user_id=ALICE,
+        at=T0,
+    )
+    validation.reset(actor_user_id=BOB, at=T0)
+    validation.decide(ValidationState.VALIDATED, actor_user_id=ALICE, at=T0)
+    assert [(e.from_state, e.to_state) for e in validation.events] == [
+        (None, ValidationState.VALIDATED),
+        (ValidationState.VALIDATED, ValidationState.PENDING),
+        (ValidationState.PENDING, ValidationState.VALIDATED),
+    ]
+
+
+def test_pending_is_reached_by_reset_only() -> None:
+    with pytest.raises(InvalidDecisionError):
+        parse_decision("pending")
+    with pytest.raises(InvalidDecisionError):
+        Validation.start(
+            ValidationSubject.for_qaset(uuid4()),
+            ValidationState.PENDING,
+            actor_user_id=ALICE,
+            at=T0,
+        )
+    validation = Validation.start(
+        ValidationSubject.for_qaset(uuid4()), ValidationState.VALIDATED, actor_user_id=ALICE, at=T0
+    )
+    with pytest.raises(InvalidDecisionError):
+        validation.decide(ValidationState.PENDING, actor_user_id=ALICE, at=T0)

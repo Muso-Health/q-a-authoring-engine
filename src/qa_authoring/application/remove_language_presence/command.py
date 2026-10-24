@@ -8,3 +8,4 @@ from uuid import UUID  # noqa: TC003 — a field type on a frozen dataclass
 class RemoveLanguagePresenceCommand:
     qaset_id: UUID
     language_id: UUID
+    actor_user_id: UUID

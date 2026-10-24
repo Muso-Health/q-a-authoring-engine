@@ -19,10 +19,16 @@ class ValidationKind(StrEnum):
 
 
 class ValidationState(StrEnum):
-    """A recorded decision. A subject never decided upon is pending: it has no Validation."""
+    """A subject never decided upon is pending without a Validation; a validated or rejected one
+    returns to pending, explicitly, when its content changes."""
 
     VALIDATED = "validated"
     REJECTED = "rejected"
+    PENDING = "pending"
+
+
+DECISIONS = frozenset({ValidationState.VALIDATED, ValidationState.REJECTED})
+CONTENT_CHANGED = "content changed"
 
 
 class InvalidDecisionError(ValueError):
@@ -40,10 +46,10 @@ class InvalidValidationHistoryError(ValueError):
 
 
 def parse_decision(decision: str) -> ValidationState:
-    try:
-        return ValidationState(decision)
-    except ValueError as exc:
-        raise InvalidDecisionError(decision) from exc
+    """A reviewer's decision: validated or rejected. Pending is reached by a reset only."""
+    if decision not in DECISIONS:
+        raise InvalidDecisionError(decision)
+    return ValidationState(decision)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +105,8 @@ class ValidationEvent:
 
 class Validation:
     """Aggregate root: the decision history of one subject. Append-only; the current state is
-    the latest event's ``to_state``. Re-deciding (either way) appends a new event."""
+    the latest event's ``to_state``. Re-deciding (either way) appends a new event, and so does a
+    reset to pending when the validated content changes: history is never rewritten."""
 
     __slots__ = ("_events", "_id", "_subject")
 
@@ -124,6 +131,7 @@ class Validation:
         at: datetime,
         note: str | None = None,
     ) -> Validation:
+        _require_decision(decision)
         first = _event(1, None, decision, actor_user_id, at, note)
         return cls(uuid4(), subject, (first,))
 
@@ -155,8 +163,22 @@ class Validation:
         at: datetime,
         note: str | None = None,
     ) -> ValidationEvent:
+        _require_decision(decision)
+        return self._transition(decision, actor_user_id, at, note)
+
+    def reset(
+        self, *, actor_user_id: UUID, at: datetime, note: str = CONTENT_CHANGED
+    ) -> ValidationEvent | None:
+        """Back to pending because the validated content changed; None if already pending."""
+        if self.current_state is ValidationState.PENDING:
+            return None
+        return self._transition(ValidationState.PENDING, actor_user_id, at, note)
+
+    def _transition(
+        self, to_state: ValidationState, actor_user_id: UUID, at: datetime, note: str | None
+    ) -> ValidationEvent:
         last = self._events[-1]
-        event = _event(last.sequence + 1, last.to_state, decision, actor_user_id, at, note)
+        event = _event(last.sequence + 1, last.to_state, to_state, actor_user_id, at, note)
         self._append(event)
         return event
 
@@ -177,6 +199,11 @@ class Validation:
 
     def __repr__(self) -> str:
         return f"Validation(id={self._id}, kind={self.kind}, state={self.current_state})"
+
+
+def _require_decision(decision: ValidationState) -> None:
+    if decision not in DECISIONS:
+        raise InvalidDecisionError(decision.value)
 
 
 def _event(

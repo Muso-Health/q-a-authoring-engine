@@ -53,7 +53,9 @@ from qa_authoring.domain.model.qaset import (
 from qa_authoring.domain.model.theme import Theme
 from qa_authoring.domain.value_objects.language_code import LanguageCode
 from qa_authoring.domain.value_objects.naming import InvalidTextError
-from tests.fakes import InMemoryStore, views
+from tests.fakes import InMemoryStore, resetter, views
+
+ACTOR = uuid4()
 
 
 @pytest.fixture
@@ -89,8 +91,10 @@ async def _add_language(store: InMemoryStore, qaset_id: UUID, language_id: UUID)
 async def _add_variant(
     store: InMemoryStore, qaset_id: UUID, language_id: UUID, text: str = "Q?"
 ) -> UUID:
-    result = await AddQuestionVariantHandler(store.qasets)(
-        AddQuestionVariantCommand(qaset_id=qaset_id, language_id=language_id, text=text)
+    result = await AddQuestionVariantHandler(store.qasets, resetter(store))(
+        AddQuestionVariantCommand(
+            qaset_id=qaset_id, language_id=language_id, text=text, actor_user_id=ACTOR
+        )
     )
     return result.id
 
@@ -174,15 +178,19 @@ async def test_update_answer(store: InMemoryStore) -> None:
     fr = await _language(store, "fr")
     qaset_id = await _qaset(store, await _theme(store), fr)
 
-    presence = await UpdateAnswerHandler(store.qasets, views(store))(
-        UpdateAnswerCommand(qaset_id=qaset_id, language_id=fr, text="Drink water.")
+    presence = await UpdateAnswerHandler(store.qasets, views(store), resetter(store))(
+        UpdateAnswerCommand(
+            qaset_id=qaset_id, language_id=fr, text="Drink water.", actor_user_id=ACTOR
+        )
     )
 
     assert presence.answer.text == "Drink water."
     assert store.qasets.rows[qaset_id].presence(fr).answer.text == "Drink water."
     with pytest.raises(LanguageNotPresentError):
-        await UpdateAnswerHandler(store.qasets, views(store))(
-            UpdateAnswerCommand(qaset_id=qaset_id, language_id=uuid4(), text="x")
+        await UpdateAnswerHandler(store.qasets, views(store), resetter(store))(
+            UpdateAnswerCommand(
+                qaset_id=qaset_id, language_id=uuid4(), text="x", actor_user_id=ACTOR
+            )
         )
 
 
@@ -193,16 +201,16 @@ async def test_remove_language_presence_drops_its_variants(store: InMemoryStore)
     await _add_variant(store, qaset_id, bm)
     kept = await _add_variant(store, qaset_id, fr)
 
-    await RemoveLanguagePresenceHandler(store.qasets)(
-        RemoveLanguagePresenceCommand(qaset_id=qaset_id, language_id=bm)
+    await RemoveLanguagePresenceHandler(store.qasets, resetter(store))(
+        RemoveLanguagePresenceCommand(qaset_id=qaset_id, language_id=bm, actor_user_id=ACTOR)
     )
 
     stored = store.qasets.rows[qaset_id]
     assert [p.language_id for p in stored.presences()] == [fr]
     assert [v.id for v in stored.variants] == [kept]
     with pytest.raises(LanguageNotPresentError):
-        await RemoveLanguagePresenceHandler(store.qasets)(
-            RemoveLanguagePresenceCommand(qaset_id=qaset_id, language_id=bm)
+        await RemoveLanguagePresenceHandler(store.qasets, resetter(store))(
+            RemoveLanguagePresenceCommand(qaset_id=qaset_id, language_id=bm, actor_user_id=ACTOR)
         )
 
 
@@ -222,18 +230,22 @@ async def test_update_and_delete_variant(store: InMemoryStore) -> None:
     qaset_id = await _qaset(store, await _theme(store), fr)
     variant_id = await _add_variant(store, qaset_id, fr, "What to do?")
 
-    updated = await UpdateQuestionVariantHandler(store.qasets, views(store))(
-        UpdateQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id, text="Now what?")
+    updated = await UpdateQuestionVariantHandler(store.qasets, views(store), resetter(store))(
+        UpdateQuestionVariantCommand(
+            qaset_id=qaset_id, variant_id=variant_id, text="Now what?", actor_user_id=ACTOR
+        )
     )
     assert (updated.id, updated.language_id, updated.text) == (variant_id, fr, "Now what?")
 
-    await DeleteQuestionVariantHandler(store.qasets)(
-        DeleteQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id)
+    await DeleteQuestionVariantHandler(store.qasets, resetter(store))(
+        DeleteQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id, actor_user_id=ACTOR)
     )
     assert store.qasets.rows[qaset_id].variants == ()
     with pytest.raises(QuestionVariantNotFoundError):
-        await DeleteQuestionVariantHandler(store.qasets)(
-            DeleteQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id)
+        await DeleteQuestionVariantHandler(store.qasets, resetter(store))(
+            DeleteQuestionVariantCommand(
+                qaset_id=qaset_id, variant_id=variant_id, actor_user_id=ACTOR
+            )
         )
 
 

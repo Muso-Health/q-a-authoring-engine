@@ -15,6 +15,8 @@ from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAu
 from qa_authoring.application.qaset_views import QASetViews
 from qa_authoring.application.role_errors import RoleInUseError, RoleNameExistsError
 from qa_authoring.application.user_errors import EmailAlreadyExistsError
+from qa_authoring.application.validation_reset import ValidationResetter
+from qa_authoring.application.validation_support import BaseLanguageResolver
 from qa_authoring.domain.model.intent import normalize_intent_text
 from qa_authoring.domain.model.permission import Permission
 from qa_authoring.domain.model.role import Role
@@ -492,3 +494,8 @@ def admin_client(container: Container, store: InMemoryStore) -> TestClient:
 
 def views(store: InMemoryStore) -> QASetViews:
     return QASetViews(store.intents, store.categories, store.validations)
+
+
+def resetter(store: InMemoryStore) -> ValidationResetter:
+    base_language = BaseLanguageResolver(store.themes, store.protocols, store.projects)
+    return ValidationResetter(store.validations, base_language, lambda: NOW)

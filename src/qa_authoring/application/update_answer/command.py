@@ -9,3 +9,4 @@ class UpdateAnswerCommand:
     qaset_id: UUID
     language_id: UUID
     text: str
+    actor_user_id: UUID

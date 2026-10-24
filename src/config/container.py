@@ -80,6 +80,7 @@ from qa_authoring.application.update_question_variant.handler import UpdateQuest
 from qa_authoring.application.update_role.handler import UpdateRoleHandler
 from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 from qa_authoring.application.update_user.handler import UpdateUserHandler
+from qa_authoring.application.validation_reset import ValidationResetter
 from qa_authoring.application.validation_support import BaseLanguageResolver, DecisionRecorder
 
 if TYPE_CHECKING:
@@ -125,6 +126,9 @@ class Container:
     @staticmethod
     def _base_language(uow: UnitOfWork) -> BaseLanguageResolver:
         return BaseLanguageResolver(uow.themes, uow.protocols, uow.projects)
+
+    def _resetter(self, uow: UnitOfWork) -> ValidationResetter:
+        return ValidationResetter(uow.validations, self._base_language(uow), self._clock)
 
     def _recorder(self, uow: UnitOfWork) -> DecisionRecorder:
         return DecisionRecorder(uow.validations, uow.users, self._clock)
@@ -204,19 +208,19 @@ class Container:
         return AddLanguagePresenceHandler(uow.qasets, uow.languages)
 
     def build_update_answer(self, uow: UnitOfWork) -> UpdateAnswerHandler:
-        return UpdateAnswerHandler(uow.qasets, self._views(uow))
+        return UpdateAnswerHandler(uow.qasets, self._views(uow), self._resetter(uow))
 
     def build_remove_language_presence(self, uow: UnitOfWork) -> RemoveLanguagePresenceHandler:
-        return RemoveLanguagePresenceHandler(uow.qasets)
+        return RemoveLanguagePresenceHandler(uow.qasets, self._resetter(uow))
 
     def build_add_question_variant(self, uow: UnitOfWork) -> AddQuestionVariantHandler:
-        return AddQuestionVariantHandler(uow.qasets)
+        return AddQuestionVariantHandler(uow.qasets, self._resetter(uow))
 
     def build_update_question_variant(self, uow: UnitOfWork) -> UpdateQuestionVariantHandler:
-        return UpdateQuestionVariantHandler(uow.qasets, self._views(uow))
+        return UpdateQuestionVariantHandler(uow.qasets, self._views(uow), self._resetter(uow))
 
     def build_delete_question_variant(self, uow: UnitOfWork) -> DeleteQuestionVariantHandler:
-        return DeleteQuestionVariantHandler(uow.qasets)
+        return DeleteQuestionVariantHandler(uow.qasets, self._resetter(uow))
 
     def build_get_qaset(self, uow: UnitOfWork) -> GetQASetHandler:
         return GetQASetHandler(uow.qasets, self._views(uow))

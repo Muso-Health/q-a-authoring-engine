@@ -50,7 +50,9 @@ class QASetLookups:
     validation_states: Mapping[ValidationSubject, ValidationState] = field(default_factory=dict)
 
     def state_of(self, subject: ValidationSubject) -> ValidationState | None:
-        return self.validation_states.get(subject)
+        """The decided state, or None while pending (never decided, or reset)."""
+        state = self.validation_states.get(subject)
+        return None if state is ValidationState.PENDING else state
 
 
 NO_LOOKUPS = QASetLookups()

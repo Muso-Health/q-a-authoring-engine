@@ -234,3 +234,40 @@ def test_audio_validation_needs_validate_audio(
         url, json={"decision": "validated"}, headers={"X-Dev-User": "reviewer@example.org"}
     )
     assert allowed.status_code == 201
+
+
+def test_editing_validated_content_resets_it_to_pending(
+    setup: tuple[TestClient, InMemoryStore], world: World
+) -> None:
+    client, store = setup
+    seed_user(store, "editor@example.org", Permission.AUTHOR_QASETS)
+    editor = {"X-Dev-User": "editor@example.org"}
+    clinical_url = f"/qasets/{world.qaset}/clinical-validation"
+    translation_url = f"/answers/{world.bm_answer}/translation-validation"
+    _ok(client.post(clinical_url, json={"decision": "validated"}))
+    _ok(client.post(translation_url, json={"decision": "validated"}))
+
+    edited = client.patch(
+        f"/qasets/{world.qaset}/languages/{world.fr}", json={"text": "new"}, headers=editor
+    )
+    assert edited.status_code == 200, edited.text
+
+    read = world.read()
+    assert read["clinical_validation"] is None
+    bm = next(p for p in read["languages"] if p["language_id"] == world.bm)
+    assert bm["answer"]["translation_validation"] == {"state": "validated"}
+    history = _ok(client.get(clinical_url), 200)
+    assert history["state"] == "pending"
+    assert history["history"][-1] == {
+        "from_state": "validated",
+        "to_state": "pending",
+        "note": "content changed",
+        "actor_email": "editor@example.org",
+        "occurred_at": "2026-10-24T12:00:00Z",
+    }
+
+    client.patch(f"/qasets/{world.qaset}/languages/{world.bm}", json={"text": "nb"}, headers=editor)
+    assert _ok(client.get(translation_url), 200)["state"] == "pending"
+    assert (
+        _ok(client.post(clinical_url, json={"decision": "validated"}), 200)["state"] == "validated"
+    )

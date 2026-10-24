@@ -50,7 +50,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0011_validations",)]
+    assert versions == [("0012_pending_resets",)]
     public_version = asyncio.run(
         _query(
             postgres_url,

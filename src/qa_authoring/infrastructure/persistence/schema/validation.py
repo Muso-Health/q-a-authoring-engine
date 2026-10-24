@@ -15,7 +15,8 @@ from sqlalchemy import (
 
 from qa_authoring.infrastructure.persistence.metadata import metadata
 
-_STATES = "('validated', 'rejected')"
+_STATES = "('validated', 'rejected', 'pending')"
+_DECISIONS = "('validated', 'rejected')"
 
 # Exactly one subject column is set, and it is the one the kind validates.
 SUBJECT_MATCHES_KIND = (
@@ -71,7 +72,9 @@ validation_events = Table(
     # Orders the history; also the index on validation_id.
     UniqueConstraint("validation_id", "sequence"),
     CheckConstraint(
-        f"to_state IN {_STATES} AND (from_state IS NULL OR from_state IN {_STATES})",
+        # A history starts with a decision; pending is only reached by a reset.
+        f"to_state IN {_STATES} AND (from_state IS NOT NULL OR to_state IN {_DECISIONS})"
+        f" AND (from_state IS NULL OR from_state IN {_STATES})",
         name="states",
     ),
 )
