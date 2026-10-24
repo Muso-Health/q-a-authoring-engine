@@ -73,6 +73,9 @@ from qa_authoring.application.resolve_current_user.handler import ResolveCurrent
 from qa_authoring.application.seed_prompt_templates.handler import SeedPromptTemplatesHandler
 from qa_authoring.application.set_answer_audio.handler import SetAnswerAudioHandler
 from qa_authoring.application.set_variant_audio.handler import SetVariantAudioHandler
+from qa_authoring.application.translate_answer.handler import TranslateAnswerHandler
+from qa_authoring.application.translate_variant.handler import TranslateVariantHandler
+from qa_authoring.application.translation_engines import TranslationEngine, Translators
 from qa_authoring.application.unassign_role.handler import UnassignRoleHandler
 from qa_authoring.application.unlink_answers.handler import UnlinkAnswersHandler
 from qa_authoring.application.unlink_variants.handler import UnlinkVariantsHandler
@@ -87,6 +90,7 @@ from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 from qa_authoring.application.update_user.handler import UpdateUserHandler
 from qa_authoring.application.validation_reset import ValidationResetter
 from qa_authoring.application.validation_support import BaseLanguageResolver, DecisionRecorder
+from qa_authoring.infrastructure.translation.llm_translator import LlmTranslator
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -94,7 +98,9 @@ if TYPE_CHECKING:
     from qa_authoring.application.audio_policy import AudioPolicy
     from qa_authoring.application.ports.audio_probe import AudioProbePort
     from qa_authoring.application.ports.audio_storage import AudioStoragePort
+    from qa_authoring.application.ports.llm import LlmPort
     from qa_authoring.application.ports.prompt_templates import PromptTemplatePort
+    from qa_authoring.application.ports.translator import TranslatorPort
     from qa_authoring.application.ports.unit_of_work import UnitOfWork
 
 
@@ -114,8 +120,12 @@ class Container:
         audio_probe: AudioProbePort,
         audio_policy: AudioPolicy,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        llm: LlmPort | None = None,
+        google_translator: TranslatorPort | None = None,
     ) -> None:
         self._unit_of_work = unit_of_work
+        self._llm = llm
+        self._google_translator = google_translator
         self._audio_storage = audio_storage
         self._audio_policy = audio_policy
         self._clock = clock
@@ -143,6 +153,15 @@ class Container:
 
     def _resetter(self, uow: UnitOfWork) -> ValidationResetter:
         return ValidationResetter(uow.validations, self._base_language(uow), self._clock)
+
+    def _translators(self, uow: UnitOfWork) -> Translators:
+        """The engines this deployment can use; a missing one is an unknown engine."""
+        engines: dict[TranslationEngine, TranslatorPort] = {}
+        if self._llm is not None:
+            engines[TranslationEngine.LLM] = LlmTranslator(self.prompt_templates(uow), self._llm)
+        if self._google_translator is not None:
+            engines[TranslationEngine.GOOGLE] = self._google_translator
+        return Translators(engines)
 
     def _recorder(self, uow: UnitOfWork) -> DecisionRecorder:
         return DecisionRecorder(uow.validations, uow.users, self._clock)
@@ -391,3 +410,21 @@ class Container:
 
     def build_seed_prompt_templates(self, uow: UnitOfWork) -> SeedPromptTemplatesHandler:
         return SeedPromptTemplatesHandler(uow.prompt_templates, self._clock)
+
+    def build_translate_answer(self, uow: UnitOfWork) -> TranslateAnswerHandler:
+        return TranslateAnswerHandler(
+            uow.qasets,
+            uow.languages,
+            self._translators(uow),
+            self._views(uow),
+            self._resetter(uow),
+        )
+
+    def build_translate_variant(self, uow: UnitOfWork) -> TranslateVariantHandler:
+        return TranslateVariantHandler(
+            uow.qasets,
+            uow.languages,
+            self._translators(uow),
+            self._views(uow),
+            self._resetter(uow),
+        )

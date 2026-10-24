@@ -67,6 +67,12 @@ file (git-ignored). Every variable has a development default.
 | `QA_AUTHORING_AUTH_ENTRA_TENANT` | *(empty)* | The Entra tenant (directory) id. Tokens must be v2 tokens issued by `https://login.microsoftonline.com/<tenant>/v2.0`; signing keys come from that tenant's JWKS. Required with `entra`. |
 | `QA_AUTHORING_AUTH_ENTRA_AUDIENCE` | *(empty)* | The token audience: the API's app registration client id (or its application ID URI). Required with `entra`; the API refuses to start without it. |
 | `QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL` | *(empty)* | When set, every startup ensures an `admin` role holding every permission, and an active user with this email holding it. |
+| `QA_AUTHORING_LLM_PROVIDER` | `gemini` | The language model behind the `llm` translation engine (and, later, variant generation). |
+| `QA_AUTHORING_LLM_MODEL` | `gemini-2.5-flash` | Model name. |
+| `QA_AUTHORING_LLM_PROJECT` / `QA_AUTHORING_LLM_LOCATION` | *(empty)* / `us-central1` | Vertex AI project and region (Application Default Credentials). |
+| `QA_AUTHORING_LLM_API_KEY` | *(empty)* | Use the Gemini API with this key instead of Vertex AI. |
+| `QA_AUTHORING_LLM_TIMEOUT_SECONDS` | `30` | Upper bound on one model call. |
+| `QA_AUTHORING_GOOGLE_TRANSLATE_PROJECT` / `QA_AUTHORING_GOOGLE_TRANSLATE_LOCATION` | *(empty)* / `global` | Google Cloud Translation project and location for the `google` engine (Application Default Credentials). |
 
 Example `.env` for local development:
 

@@ -19,6 +19,7 @@ from apps.api.routers.protocols import router as protocols_router
 from apps.api.routers.qasets import router as qasets_router
 from apps.api.routers.roles import router as roles_router
 from apps.api.routers.themes import router as themes_router
+from apps.api.routers.translation import router as translation_router
 from apps.api.routers.users import router as users_router
 from apps.api.routers.validations import router as validations_router
 from apps.api.version import API_VERSION
@@ -79,6 +80,7 @@ def create_app(
         audio_router,
         validations_router,
         prompt_templates_router,
+        translation_router,
     ):
         app.include_router(router, dependencies=[Depends(require_authenticated)])
     return app

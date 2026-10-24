@@ -134,3 +134,34 @@ def test_dev_auth_and_bootstrap_admin(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_auth_provider_must_be_known(monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
     with pytest.raises(ValidationError):
         _settings(monkeypatch, AUTH_PROVIDER=provider)
+
+
+def test_llm_and_translation_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    defaults = _settings(monkeypatch)
+    assert (defaults.llm_provider, defaults.llm_model) == ("gemini", "gemini-2.5-flash")
+    settings = _settings(
+        monkeypatch,
+        LLM_MODEL="gemini-2.5-pro",
+        LLM_PROJECT="proj",
+        LLM_LOCATION="europe-west1",
+        LLM_API_KEY="key",
+        LLM_TIMEOUT_SECONDS="12.5",
+        GOOGLE_TRANSLATE_PROJECT="translate-proj",
+        GOOGLE_TRANSLATE_LOCATION="us-central1",
+    )
+    assert (settings.llm_model, settings.llm_project, settings.llm_location) == (
+        "gemini-2.5-pro",
+        "proj",
+        "europe-west1",
+    )
+    assert (settings.llm_api_key, settings.llm_timeout_seconds) == ("key", 12.5)
+    assert (settings.google_translate_project, settings.google_translate_location) == (
+        "translate-proj",
+        "us-central1",
+    )
+
+
+@pytest.mark.parametrize("provider", ["", "openai", "GEMINI"])
+def test_llm_provider_must_be_known(monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
+    with pytest.raises(ValidationError):
+        _settings(monkeypatch, LLM_PROVIDER=provider)

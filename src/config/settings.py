@@ -64,6 +64,20 @@ class Settings(BaseSettings):
     auth_entra_tenant: str = ""
     bootstrap_admin_email: str = ""
 
+    # Language model (translation, variant generation). Gemini runs on Vertex AI with
+    # ``llm_project`` / ``llm_location`` and Application Default Credentials, or on the Gemini
+    # API when ``llm_api_key`` is set. Each call is bounded by ``llm_timeout_seconds``.
+    llm_provider: str = "gemini"
+    llm_model: str = "gemini-2.5-flash"
+    llm_project: str = ""
+    llm_location: str = "us-central1"
+    llm_api_key: str = ""
+    llm_timeout_seconds: float = 30.0
+
+    # Google Cloud Translation (the "google" engine), with Application Default Credentials.
+    google_translate_project: str = ""
+    google_translate_location: str = "global"
+
     @field_validator("db_schema")
     @classmethod
     def _plain_identifier_not_public(cls, value: str) -> str:
@@ -83,6 +97,13 @@ class Settings(BaseSettings):
     def _known_auth_provider(cls, value: str) -> str:
         if value not in {"entra", "dev"}:
             raise ValueError("auth_provider must be 'entra' or 'dev'")
+        return value
+
+    @field_validator("llm_provider")
+    @classmethod
+    def _known_llm_provider(cls, value: str) -> str:
+        if value not in {"gemini"}:
+            raise ValueError("llm_provider must be 'gemini'")
         return value
 
     @property

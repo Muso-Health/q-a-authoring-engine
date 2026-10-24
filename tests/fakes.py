@@ -12,6 +12,11 @@ from apps.api.app import create_app
 from config.container import Container
 from qa_authoring.application.audio_policy import AudioPolicy
 from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAudioError
+from qa_authoring.application.ports.llm import LlmUnavailableError
+from qa_authoring.application.ports.translator import (
+    TranslationEngineError,
+    UnsupportedLanguageForEngineError,
+)
 from qa_authoring.application.qaset_views import QASetViews
 from qa_authoring.application.role_errors import RoleInUseError, RoleNameExistsError
 from qa_authoring.application.user_errors import EmailAlreadyExistsError
@@ -405,6 +410,39 @@ class FakeAudioProbe:
         return ProbedAudio(duration_ms=self.duration_ms, mime_type=self.mime_type)
 
 
+class FakeLlm:
+    """Records prompts; replies with ``reply``, or fails while ``failing``."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+        self.reply = "  Traduction du modèle  "
+        self.failing = False
+
+    async def generate(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        if self.failing:
+            raise LlmUnavailableError("the model is unavailable")
+        return self.reply
+
+
+class FakeGoogleTranslator:
+    """Translates to ``<target code>: <text>``; ``unsupported`` codes and ``failing`` raise."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+        self.unsupported: set[str] = set()
+        self.failing = False
+
+    async def translate(self, text: str, source: Language, target: Language) -> str:
+        for language in (source, target):
+            if language.code.value in self.unsupported:
+                raise UnsupportedLanguageForEngineError("google", language.code.value)
+        self.calls.append((text, source.code.value, target.code.value))
+        if self.failing:
+            raise TranslationEngineError("google")
+        return f"{target.code.value}: {text}"
+
+
 AUDIO_POLICY = AudioPolicy(
     max_upload_bytes=64,
     allowed_mime_types=frozenset({"audio/webm", "audio/ogg", "audio/wav"}),
@@ -430,6 +468,8 @@ class InMemoryStore:
     prompt_templates: InMemoryPromptTemplateRepository = field(
         default_factory=InMemoryPromptTemplateRepository
     )
+    llm: FakeLlm = field(default_factory=FakeLlm)
+    google_translator: FakeGoogleTranslator = field(default_factory=FakeGoogleTranslator)
     events: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -495,6 +535,8 @@ def in_memory_container() -> tuple[Container, InMemoryStore]:
         audio_probe=store.audio_probe,
         audio_policy=AUDIO_POLICY,
         clock=lambda: NOW,
+        llm=store.llm,
+        google_translator=store.google_translator,
     )
     return container, store
 

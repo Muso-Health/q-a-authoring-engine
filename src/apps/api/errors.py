@@ -22,6 +22,10 @@ from qa_authoring.application.language_errors import (
     LanguageNotFoundError,
 )
 from qa_authoring.application.ports.identity import UnauthenticatedError
+from qa_authoring.application.ports.translator import (
+    TranslationEngineError,
+    UnsupportedLanguageForEngineError,
+)
 from qa_authoring.application.project_errors import (
     ProjectHasProtocolsError,
     ProjectNotFoundError,
@@ -39,6 +43,7 @@ from qa_authoring.application.role_errors import (
     RoleNotFoundError,
 )
 from qa_authoring.application.theme_errors import ThemeHasQASetsError, ThemeNotFoundError
+from qa_authoring.application.translation_engines import UnknownEngineError
 from qa_authoring.application.user_errors import (
     EmailAlreadyExistsError,
     NotProvisionedError,
@@ -105,6 +110,9 @@ _RULES: dict[type[Exception], _Rule] = {
     NoBaseLanguagePresenceError: _Rule(409, "no_base_language_presence"),
     NotATranslationError: _Rule(422, "not_a_translation"),
     InvalidDecisionError: _Rule(422, "invalid_decision"),
+    UnknownEngineError: _Rule(422, "unknown_engine"),
+    UnsupportedLanguageForEngineError: _Rule(422, "unsupported_language_for_engine"),
+    TranslationEngineError: _Rule(502, "translation_engine_error"),
     InvalidPromptTemplateError: _Rule(422, "invalid_prompt_template", _prompt_template_details),
     UnknownPermissionError: _Rule(422, "unknown_permission"),
     InvalidEmailError: _Rule(422, "invalid_email"),
@@ -163,10 +171,11 @@ def _body(code: str, message: str, details: dict[str, Any] | None) -> dict[str, 
 
 async def _handle(request: Request, exc: Exception) -> JSONResponse:
     rule = _rule_for(type(exc))
-    if rule is None or rule.status >= 500:
+    if rule is None:
         return JSONResponse(
             status_code=500, content=_body("internal_error", "an internal error occurred", None)
         )
+    # Mapped errors carry messages written by this application, never provider internals.
     details = None if rule.details is None else rule.details(exc)
     return JSONResponse(status_code=rule.status, content=_body(rule.code, str(exc), details))
 

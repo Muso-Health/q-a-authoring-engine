@@ -24,6 +24,8 @@ dependencies = [
     "pyjwt[crypto]",
     "python-multipart",
     "google-cloud-storage",
+    "google-cloud-translate>=3,<4",
+    "google-genai>=2.33,<3",
 ]
 
 [project.optional-dependencies]
@@ -76,6 +78,8 @@ module = [
     "google.cloud.sql.*",
     "google.cloud.storage.*",
     "google.cloud.exceptions",
+    "google.cloud.translate_v3",
+    "google.cloud.translate_v3.*",
 ]
 ignore_missing_imports = true
 
