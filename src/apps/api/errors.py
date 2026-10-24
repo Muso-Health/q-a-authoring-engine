@@ -27,6 +27,7 @@ from qa_authoring.application.project_errors import (
     ProjectNotFoundError,
     UnknownBaseLanguageError,
 )
+from qa_authoring.application.prompt_template_errors import PromptTemplateNotFoundError
 from qa_authoring.application.protocol_errors import (
     ProtocolHasThemesError,
     ProtocolNotFoundError,
@@ -50,6 +51,7 @@ from qa_authoring.application.validation_errors import (
 )
 from qa_authoring.domain.model.language import InvalidLanguageNameError
 from qa_authoring.domain.model.permission import UnknownPermissionError
+from qa_authoring.domain.model.prompt_template import InvalidPromptTemplateError
 from qa_authoring.domain.model.qaset import (
     AnswerNotFoundError,
     CategoryNotAttachedError,
@@ -70,6 +72,8 @@ from qa_authoring.domain.value_objects.language_code import InvalidLanguageCodeE
 from qa_authoring.domain.value_objects.naming import InvalidNameError, InvalidTextError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fastapi import FastAPI, Request
 
 
@@ -77,6 +81,12 @@ if TYPE_CHECKING:
 class _Rule:
     status: int
     code: str
+    details: Callable[[Any], dict[str, Any]] | None = None
+
+
+def _prompt_template_details(exc: InvalidPromptTemplateError) -> dict[str, Any]:
+    # The offending placeholders reach the client so the editor can show what to fix.
+    return {"missing": list(exc.missing), "unknown": list(exc.unknown)}
 
 
 # Every domain/application error a client can receive, mapped to an HTTP status and a stable
@@ -88,12 +98,14 @@ _RULES: dict[type[Exception], _Rule] = {
     UserNotFoundError: _Rule(404, "user_not_found"),
     RoleNotFoundError: _Rule(404, "role_not_found"),
     RoleNotAssignedError: _Rule(404, "role_not_assigned"),
+    PromptTemplateNotFoundError: _Rule(404, "prompt_template_not_found"),
     RoleInUseError: _Rule(409, "role_in_use"),
     EmailAlreadyExistsError: _Rule(409, "email_already_exists"),
     RoleNameExistsError: _Rule(409, "role_name_exists"),
     NoBaseLanguagePresenceError: _Rule(409, "no_base_language_presence"),
     NotATranslationError: _Rule(422, "not_a_translation"),
     InvalidDecisionError: _Rule(422, "invalid_decision"),
+    InvalidPromptTemplateError: _Rule(422, "invalid_prompt_template", _prompt_template_details),
     UnknownPermissionError: _Rule(422, "unknown_permission"),
     InvalidEmailError: _Rule(422, "invalid_email"),
     LanguageNotFoundError: _Rule(404, "language_not_found"),
@@ -155,7 +167,8 @@ async def _handle(request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse(
             status_code=500, content=_body("internal_error", "an internal error occurred", None)
         )
-    return JSONResponse(status_code=rule.status, content=_body(rule.code, str(exc), None))
+    details = None if rule.details is None else rule.details(exc)
+    return JSONResponse(status_code=rule.status, content=_body(rule.code, str(exc), details))
 
 
 async def _handle_validation(request: Request, exc: Exception) -> JSONResponse:

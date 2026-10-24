@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
+    from qa_authoring.application.ports.prompt_template_repository import (
+        PromptTemplateRepository,
+    )
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.role_repository import RoleRepository
@@ -32,6 +35,7 @@ class UnitOfWork(Protocol):
     users: UserRepository
     roles: RoleRepository
     validations: ValidationRepository
+    prompt_templates: PromptTemplateRepository
 
     def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
         """Run ``action`` once the transaction has committed; best-effort, never rolled back.

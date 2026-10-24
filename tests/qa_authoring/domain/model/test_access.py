@@ -31,6 +31,7 @@ def test_the_catalogue_is_fixed() -> None:
         "validate_translation",
         "validate_audio",
         "manage_access",
+        "manage_prompts",
     }
 
 

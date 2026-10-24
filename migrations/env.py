@@ -11,6 +11,7 @@ import qa_authoring.infrastructure.persistence.schema.catalog
 import qa_authoring.infrastructure.persistence.schema.category
 import qa_authoring.infrastructure.persistence.schema.intent
 import qa_authoring.infrastructure.persistence.schema.language
+import qa_authoring.infrastructure.persistence.schema.prompt_template
 import qa_authoring.infrastructure.persistence.schema.qaset
 import qa_authoring.infrastructure.persistence.schema.validation  # noqa: F401
 from config.database import engine_factory_from_settings

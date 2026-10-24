@@ -36,6 +36,7 @@ from qa_authoring.application.get_clinical_validation.handler import GetClinical
 from qa_authoring.application.get_intent.handler import GetIntentHandler
 from qa_authoring.application.get_language.handler import GetLanguageHandler
 from qa_authoring.application.get_project.handler import GetProjectHandler
+from qa_authoring.application.get_prompt_template.handler import GetPromptTemplateHandler
 from qa_authoring.application.get_protocol.handler import GetProtocolHandler
 from qa_authoring.application.get_qaset.handler import GetQASetHandler
 from qa_authoring.application.get_role.handler import GetRoleHandler
@@ -50,11 +51,13 @@ from qa_authoring.application.list_categories.handler import ListCategoriesHandl
 from qa_authoring.application.list_intents.handler import ListIntentsHandler
 from qa_authoring.application.list_languages.handler import ListLanguagesHandler
 from qa_authoring.application.list_projects.handler import ListProjectsHandler
+from qa_authoring.application.list_prompt_templates.handler import ListPromptTemplatesHandler
 from qa_authoring.application.list_protocols.handler import ListProtocolsHandler
 from qa_authoring.application.list_qasets.handler import ListQASetsHandler
 from qa_authoring.application.list_roles.handler import ListRolesHandler
 from qa_authoring.application.list_themes.handler import ListThemesHandler
 from qa_authoring.application.list_users.handler import ListUsersHandler
+from qa_authoring.application.prompt_templates import PromptRenderer
 from qa_authoring.application.qaset_views import QASetViews
 from qa_authoring.application.record_audio_decision.handler import RecordAudioDecisionHandler
 from qa_authoring.application.record_clinical_decision.handler import RecordClinicalDecisionHandler
@@ -67,6 +70,7 @@ from qa_authoring.application.register_language.handler import RegisterLanguageH
 from qa_authoring.application.remove_category.handler import RemoveCategoryHandler
 from qa_authoring.application.remove_language_presence.handler import RemoveLanguagePresenceHandler
 from qa_authoring.application.resolve_current_user.handler import ResolveCurrentUserHandler
+from qa_authoring.application.seed_prompt_templates.handler import SeedPromptTemplatesHandler
 from qa_authoring.application.set_answer_audio.handler import SetAnswerAudioHandler
 from qa_authoring.application.set_variant_audio.handler import SetVariantAudioHandler
 from qa_authoring.application.unassign_role.handler import UnassignRoleHandler
@@ -75,6 +79,7 @@ from qa_authoring.application.unlink_variants.handler import UnlinkVariantsHandl
 from qa_authoring.application.update_answer.handler import UpdateAnswerHandler
 from qa_authoring.application.update_language.handler import UpdateLanguageHandler
 from qa_authoring.application.update_project.handler import UpdateProjectHandler
+from qa_authoring.application.update_prompt_template.handler import UpdatePromptTemplateHandler
 from qa_authoring.application.update_protocol.handler import UpdateProtocolHandler
 from qa_authoring.application.update_question_variant.handler import UpdateQuestionVariantHandler
 from qa_authoring.application.update_role.handler import UpdateRoleHandler
@@ -89,6 +94,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.audio_policy import AudioPolicy
     from qa_authoring.application.ports.audio_probe import AudioProbePort
     from qa_authoring.application.ports.audio_storage import AudioStoragePort
+    from qa_authoring.application.ports.prompt_templates import PromptTemplatePort
     from qa_authoring.application.ports.unit_of_work import UnitOfWork
 
 
@@ -118,6 +124,14 @@ class Container:
     @property
     def audio_policy(self) -> AudioPolicy:
         return self._audio_policy
+
+    def unit_of_work(self) -> UnitOfWork:
+        """A unit of work for a use case that composes several ports itself."""
+        return self._unit_of_work()
+
+    @staticmethod
+    def prompt_templates(uow: UnitOfWork) -> PromptTemplatePort:
+        return PromptRenderer(uow.prompt_templates)
 
     @staticmethod
     def _views(uow: UnitOfWork) -> QASetViews:
@@ -365,3 +379,15 @@ class Container:
 
     def build_get_audio_validation(self, uow: UnitOfWork) -> GetAudioValidationHandler:
         return GetAudioValidationHandler(uow.qasets, self._recorder(uow))
+
+    def build_list_prompt_templates(self, uow: UnitOfWork) -> ListPromptTemplatesHandler:
+        return ListPromptTemplatesHandler(uow.prompt_templates, uow.users)
+
+    def build_get_prompt_template(self, uow: UnitOfWork) -> GetPromptTemplateHandler:
+        return GetPromptTemplateHandler(uow.prompt_templates, uow.users)
+
+    def build_update_prompt_template(self, uow: UnitOfWork) -> UpdatePromptTemplateHandler:
+        return UpdatePromptTemplateHandler(uow.prompt_templates, uow.users, self._clock)
+
+    def build_seed_prompt_templates(self, uow: UnitOfWork) -> SeedPromptTemplatesHandler:
+        return SeedPromptTemplatesHandler(uow.prompt_templates, self._clock)

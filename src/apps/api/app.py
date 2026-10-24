@@ -14,6 +14,7 @@ from apps.api.routers.health import router as health_router
 from apps.api.routers.intents import router as intents_router
 from apps.api.routers.languages import router as languages_router
 from apps.api.routers.projects import router as projects_router
+from apps.api.routers.prompt_templates import router as prompt_templates_router
 from apps.api.routers.protocols import router as protocols_router
 from apps.api.routers.qasets import router as qasets_router
 from apps.api.routers.roles import router as roles_router
@@ -77,6 +78,7 @@ def create_app(
         categories_router,
         audio_router,
         validations_router,
+        prompt_templates_router,
     ):
         app.include_router(router, dependencies=[Depends(require_authenticated)])
     return app

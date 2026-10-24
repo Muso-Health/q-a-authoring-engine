@@ -11,6 +11,9 @@ from qa_authoring.infrastructure.persistence.repositories.language import (
     PostgresLanguageRepository,
 )
 from qa_authoring.infrastructure.persistence.repositories.project import PostgresProjectRepository
+from qa_authoring.infrastructure.persistence.repositories.prompt_template import (
+    PostgresPromptTemplateRepository,
+)
 from qa_authoring.infrastructure.persistence.repositories.protocol import (
     PostgresProtocolRepository,
 )
@@ -32,6 +35,9 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
+    from qa_authoring.application.ports.prompt_template_repository import (
+        PromptTemplateRepository,
+    )
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.role_repository import RoleRepository
@@ -56,6 +62,7 @@ class SqlAlchemyUnitOfWork:
     users: UserRepository
     roles: RoleRepository
     validations: ValidationRepository
+    prompt_templates: PromptTemplateRepository
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -79,6 +86,7 @@ class SqlAlchemyUnitOfWork:
         self.users = PostgresUserRepository(self._connection)
         self.roles = PostgresRoleRepository(self._connection)
         self.validations = PostgresValidationRepository(self._connection)
+        self.prompt_templates = PostgresPromptTemplateRepository(self._connection)
         return self
 
     async def __aexit__(

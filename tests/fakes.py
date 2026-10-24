@@ -33,6 +33,9 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
+    from qa_authoring.application.ports.prompt_template_repository import (
+        PromptTemplateRepository,
+    )
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.role_repository import RoleRepository
@@ -43,6 +46,7 @@ if TYPE_CHECKING:
     from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
+    from qa_authoring.domain.model.prompt_template import PromptTemplate, PromptTemplateKey
     from qa_authoring.domain.model.protocol import Protocol
     from qa_authoring.domain.model.qaset import AudioReference, QASet
     from qa_authoring.domain.model.theme import Theme
@@ -350,6 +354,25 @@ class InMemoryValidationRepository:
         return {s: self.rows[s].current_state for s in subjects if s in self.rows}
 
 
+class InMemoryPromptTemplateRepository:
+    def __init__(self) -> None:
+        self.rows: dict[PromptTemplateKey, PromptTemplate] = {}
+
+    async def get(self, key: PromptTemplateKey) -> PromptTemplate | None:
+        row = self.rows.get(key)
+        return None if row is None else deepcopy(row)
+
+    async def list(self) -> tuple[PromptTemplate, ...]:
+        return tuple(deepcopy(self.rows[k]) for k in sorted(self.rows))
+
+    async def add(self, template: PromptTemplate) -> None:
+        assert template.key not in self.rows, "one template per key"
+        self.rows[template.key] = deepcopy(template)
+
+    async def update(self, template: PromptTemplate) -> None:
+        self.rows[template.key] = deepcopy(template)
+
+
 class InMemoryAudioStorage:
     def __init__(self) -> None:
         self.blobs: dict[str, bytes] = {}
@@ -404,6 +427,9 @@ class InMemoryStore:
     users: InMemoryUserRepository = field(default_factory=InMemoryUserRepository)
     roles: InMemoryRoleRepository = field(default_factory=InMemoryRoleRepository)
     validations: InMemoryValidationRepository = field(default_factory=InMemoryValidationRepository)
+    prompt_templates: InMemoryPromptTemplateRepository = field(
+        default_factory=InMemoryPromptTemplateRepository
+    )
     events: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -424,6 +450,7 @@ class InMemoryUnitOfWork:
     users: UserRepository
     roles: RoleRepository
     validations: ValidationRepository
+    prompt_templates: PromptTemplateRepository
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -436,6 +463,7 @@ class InMemoryUnitOfWork:
         self.users = store.users
         self.roles = store.roles
         self.validations = store.validations
+        self.prompt_templates = store.prompt_templates
         self._events = store.events
         self._after_commit: list[Callable[[], Awaitable[None]]] = []
 

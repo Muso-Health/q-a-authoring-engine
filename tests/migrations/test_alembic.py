@@ -50,7 +50,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0012_pending_resets",)]
+    assert versions == [("0013_prompt_templates",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -107,6 +107,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("fk_audios_answer_id_answers", "audios", "answers", "CASCADE"),
         ("fk_audios_variant_id_question_variants", "audios", "question_variants", "CASCADE"),
         ("fk_projects_base_language_id_languages", "projects", "languages", "RESTRICT"),
+        ("fk_prompt_templates_updated_by_users", "prompt_templates", "users", "RESTRICT"),
         ("fk_protocols_project_id_projects", "protocols", "projects", "RESTRICT"),
         (
             "fk_qaset_categories_category_id_categories",
@@ -292,6 +293,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_answers_language_id",),
         ("ix_audios_storage_uri",),
         ("ix_projects_base_language_id",),
+        ("ix_prompt_templates_updated_by",),
         ("ix_protocols_project_id",),
         ("ix_qaset_categories_category_id",),
         ("ix_qasets_theme_id",),

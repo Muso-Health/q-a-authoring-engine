@@ -107,6 +107,13 @@ each write needs a permission from the fixed catalogue (`GET /permissions`), gra
 roles. `GET /me` returns the current user's effective permissions. To get in the first time,
 set `QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL`; with the `dev` provider, send `X-Dev-User: <that email>`.
 
+The prompts sent to language models (translation, question-variant generation) are
+organization-wide templates under `/prompt-templates`: one active template per use, readable
+by everyone and editable with the `manage_prompts` permission. Each startup seeds a default
+for any use that has none, and never overwrites an edited template. Templates use named
+placeholders such as `{text}`, must use exactly the placeholders their use requires, and
+write literal braces as `{{` and `}}`.
+
 To run it in Docker instead (ffmpeg included):
 
 ```bash

@@ -15,6 +15,7 @@ from config.container import Container
 from config.database import engine_factory_from_settings
 from config.settings import Settings
 from qa_authoring.application.bootstrap_admin.command import BootstrapAdminCommand
+from qa_authoring.application.seed_prompt_templates.command import SeedPromptTemplatesCommand
 from qa_authoring.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             audio_probe=_audio_probe,
             audio_policy=_audio_policy,
         )
+        await container.run(container.build_seed_prompt_templates, SeedPromptTemplatesCommand())
         if _settings.bootstrap_admin_email:
             command = BootstrapAdminCommand(_settings.bootstrap_admin_email)
             await container.run(container.build_bootstrap_admin, command)

@@ -20,6 +20,7 @@ class Permission(StrEnum):
     VALIDATE_TRANSLATION = "validate_translation"
     VALIDATE_AUDIO = "validate_audio"
     MANAGE_ACCESS = "manage_access"
+    MANAGE_PROMPTS = "manage_prompts"
 
 
 class UnknownPermissionError(ValueError):
