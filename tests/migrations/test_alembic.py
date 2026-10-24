@@ -14,7 +14,7 @@ pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "qa_authoring_it"
 # An audio's created_at is set by the domain; role assignments need per-row timestamps.
-_CREATED_AT_DEFAULTS = {"audios": None, "user_roles": "clock_timestamp()"}
+_CREATED_AT_DEFAULTS = {"audios": None, "documentation": None, "user_roles": "clock_timestamp()"}
 
 
 def _alembic_config() -> Config:
@@ -50,7 +50,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0013_prompt_templates",)]
+    assert versions == [("0014_documentation",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -106,6 +106,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("fk_answers_qaset_id_qasets", "answers", "qasets", "CASCADE"),
         ("fk_audios_answer_id_answers", "audios", "answers", "CASCADE"),
         ("fk_audios_variant_id_question_variants", "audios", "question_variants", "CASCADE"),
+        ("fk_documentation_theme_id_themes", "documentation", "themes", "CASCADE"),
         ("fk_projects_base_language_id_languages", "projects", "languages", "RESTRICT"),
         ("fk_prompt_templates_updated_by_users", "prompt_templates", "users", "RESTRICT"),
         ("fk_protocols_project_id_projects", "protocols", "projects", "RESTRICT"),
@@ -292,6 +293,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_answer_translation_links_answer_low_id",),
         ("ix_answers_language_id",),
         ("ix_audios_storage_uri",),
+        ("ix_documentation_storage_uri",),
+        ("ix_documentation_theme_id",),
         ("ix_projects_base_language_id",),
         ("ix_prompt_templates_updated_by",),
         ("ix_protocols_project_id",),
@@ -323,6 +326,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             "answer_translation_links",
             "answers",
             "audios",
+            "documentation",
             "qaset_categories",
             "question_variants",
             "user_roles",
@@ -340,7 +344,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
                 "OR table_name LIKE '%translation_links' OR table_name LIKE '%intents' "
                 "OR table_name LIKE '%categories' OR table_name = 'audios' "
                 "OR table_name IN ('users', 'roles', 'role_permissions', 'user_roles', "
-                "'validations', 'validation_events'))",
+                "'validations', 'validation_events', 'documentation'))",
             )
         )
         == []

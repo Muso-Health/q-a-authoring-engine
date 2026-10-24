@@ -13,6 +13,10 @@ from config.audio import (
 from config.auth import identity_provider_from_settings
 from config.container import Container
 from config.database import engine_factory_from_settings
+from config.documentation import (
+    documentation_policy_from_settings,
+    documentation_storage_from_settings,
+)
 from config.llm import google_translator_from_settings, llm_from_settings
 from config.settings import Settings
 from qa_authoring.application.bootstrap_admin.command import BootstrapAdminCommand
@@ -35,6 +39,8 @@ _audio_policy = audio_policy_from_settings(_settings)
 _identity_provider = identity_provider_from_settings(_settings)
 _llm = llm_from_settings(_settings)
 _google_translator = google_translator_from_settings(_settings)
+_documentation_storage = documentation_storage_from_settings(_settings)
+_documentation_policy = documentation_policy_from_settings(_settings)
 
 
 @asynccontextmanager
@@ -47,6 +53,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             audio_policy=_audio_policy,
             llm=_llm,
             google_translator=_google_translator,
+            documentation_storage=_documentation_storage,
+            documentation_policy=_documentation_policy,
         )
         await container.run(container.build_seed_prompt_templates, SeedPromptTemplatesCommand())
         if _settings.bootstrap_admin_email:

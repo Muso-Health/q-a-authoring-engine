@@ -31,7 +31,10 @@ class BaseLanguageResolver:
         self._projects = projects
 
     async def of(self, qaset: QASet) -> UUID:
-        theme = await self._themes.get(qaset.theme_id)
+        return await self.of_theme(qaset.theme_id)
+
+    async def of_theme(self, theme_id: UUID) -> UUID:
+        theme = await self._themes.get(theme_id)
         assert theme is not None
         protocol = await self._protocols.get(theme.protocol_id)
         assert protocol is not None

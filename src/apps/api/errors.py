@@ -15,12 +15,19 @@ from qa_authoring.application.audio_errors import (
     UnsupportedAudioTypeError,
 )
 from qa_authoring.application.category_errors import CategoryInUseError, CategoryNotFoundError
+from qa_authoring.application.completeness_errors import NoDocumentationError
+from qa_authoring.application.documentation_errors import (
+    DocumentationNotFoundError,
+    DocumentTooLargeError,
+    UnsupportedDocumentTypeError,
+)
 from qa_authoring.application.intent_errors import IntentInUseError, IntentNotFoundError
 from qa_authoring.application.language_errors import (
     LanguageCodeAlreadyExistsError,
     LanguageInUseError,
     LanguageNotFoundError,
 )
+from qa_authoring.application.ports.completeness_analyzer import CompletenessEngineError
 from qa_authoring.application.ports.identity import UnauthenticatedError
 from qa_authoring.application.ports.translator import (
     TranslationEngineError,
@@ -105,6 +112,11 @@ _RULES: dict[type[Exception], _Rule] = {
     RoleNotFoundError: _Rule(404, "role_not_found"),
     RoleNotAssignedError: _Rule(404, "role_not_assigned"),
     PromptTemplateNotFoundError: _Rule(404, "prompt_template_not_found"),
+    DocumentationNotFoundError: _Rule(404, "documentation_not_found"),
+    NoDocumentationError: _Rule(409, "no_documentation"),
+    UnsupportedDocumentTypeError: _Rule(422, "unsupported_document_type"),
+    DocumentTooLargeError: _Rule(422, "document_too_large"),
+    CompletenessEngineError: _Rule(502, "completeness_engine_error"),
     RoleInUseError: _Rule(409, "role_in_use"),
     EmailAlreadyExistsError: _Rule(409, "email_already_exists"),
     RoleNameExistsError: _Rule(409, "role_name_exists"),

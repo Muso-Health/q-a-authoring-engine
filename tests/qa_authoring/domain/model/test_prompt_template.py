@@ -20,8 +20,13 @@ VALID = "Translate from {source_language} to {target_language}:\n{text}"
 
 
 def test_keys_and_their_required_placeholders() -> None:
-    assert {k.value for k in PromptTemplateKey} == {"translation", "variant_generation"}
+    assert {k.value for k in PromptTemplateKey} == {
+        "translation",
+        "variant_generation",
+        "completeness",
+    }
     assert {
+        PromptTemplateKey.COMPLETENESS: frozenset({"documentation", "answers", "language"}),
         PromptTemplateKey.TRANSLATION: frozenset({"source_language", "target_language", "text"}),
         PromptTemplateKey.VARIANT_GENERATION: frozenset({"answer", "context", "language"}),
     } == REQUIRED_PLACEHOLDERS

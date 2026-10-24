@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from google.api_core.exceptions import NotFound
 
-from qa_authoring.infrastructure.audio.keys import object_key
+from qa_authoring.infrastructure.storage.keys import object_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -23,8 +23,8 @@ def _default_client() -> tuple[Any, Any]:
     return storage.Client(credentials=credentials, project=project), credentials
 
 
-class GcsAudioStorage:
-    """The audio storage port on Google Cloud Storage: ``gs://<bucket>/<prefix><sha256>``.
+class GcsBlobStorage:
+    """A blob storage port on Google Cloud Storage: ``gs://<bucket>/<prefix><sha256>``.
 
     The client is built lazily (first call), so the app starts without credentials; blocking
     calls run in a thread. Signed URLs are V4 GET URLs. Credentials without a private key (Cloud
@@ -39,7 +39,7 @@ class GcsAudioStorage:
         client_factory: Callable[[], tuple[Any, Any]] = _default_client,
     ) -> None:
         if not bucket:
-            raise ValueError("an audio bucket is required for GCS storage")
+            raise ValueError("a bucket is required for GCS storage")
         self._bucket = bucket
         self._prefix = prefix
         self._client_factory = client_factory
@@ -50,6 +50,9 @@ class GcsAudioStorage:
         key = object_key(self._prefix, content)
         await asyncio.to_thread(self._upload, key, content, mime_type)
         return f"{_SCHEME}{self._bucket}/{key}"
+
+    async def read(self, storage_uri: str) -> bytes:
+        return await asyncio.to_thread(self._download, self._key(storage_uri))
 
     async def delete(self, storage_uri: str) -> None:
         await asyncio.to_thread(self._delete, self._key(storage_uri))
@@ -72,6 +75,10 @@ class GcsAudioStorage:
 
     def _upload(self, key: str, content: bytes, mime_type: str) -> None:
         self._blob(key).upload_from_string(content, content_type=mime_type)
+
+    def _download(self, key: str) -> bytes:
+        content: bytes = self._blob(key).download_as_bytes()
+        return content
 
     def _delete(self, key: str) -> None:
         with contextlib.suppress(NotFound):

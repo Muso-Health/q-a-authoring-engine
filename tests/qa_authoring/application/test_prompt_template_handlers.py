@@ -77,7 +77,7 @@ async def test_list_and_get(world: tuple[Container, InMemoryStore]) -> None:
         container.build_get_prompt_template, GetPromptTemplateQuery("variant_generation")
     )
 
-    assert [t.key for t in listed] == ["translation", "variant_generation"]
+    assert [t.key for t in listed] == ["completeness", "translation", "variant_generation"]
     assert got.key == "variant_generation"
     assert got.required_placeholders == ("answer", "context", "language")
     assert (got.updated_by_email, got.updated_at) == (None, NOW)
@@ -87,13 +87,13 @@ async def test_unknown_or_missing_templates_are_not_found(
     world: tuple[Container, InMemoryStore],
 ) -> None:
     container, _ = world
-    for key in ("completeness", "TRANSLATION", "translation"):  # last: valid but not seeded
+    for key in ("summary", "TRANSLATION", "translation"):  # last: valid but not seeded
         with pytest.raises(PromptTemplateNotFoundError):
             await container.run(container.build_get_prompt_template, GetPromptTemplateQuery(key))
     with pytest.raises(PromptTemplateNotFoundError):
         await container.run(
             container.build_update_prompt_template,
-            UpdatePromptTemplateCommand("completeness", TRANSLATION, actor_user_id=uuid4()),
+            UpdatePromptTemplateCommand("summary", TRANSLATION, actor_user_id=uuid4()),
         )
 
 

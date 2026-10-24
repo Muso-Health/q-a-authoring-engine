@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING
 from qa_authoring.application.add_category.handler import AddCategoryHandler
 from qa_authoring.application.add_language_presence.handler import AddLanguagePresenceHandler
 from qa_authoring.application.add_question_variant.handler import AddQuestionVariantHandler
+from qa_authoring.application.analyze_theme_completeness.handler import (
+    AnalyzeThemeCompletenessHandler,
+)
 from qa_authoring.application.assign_role.handler import AssignRoleHandler
 from qa_authoring.application.attach_intent.handler import AttachIntentHandler
 from qa_authoring.application.audio_upload import AudioUploader
@@ -18,6 +21,7 @@ from qa_authoring.application.create_theme.handler import CreateThemeHandler
 from qa_authoring.application.create_user.handler import CreateUserHandler
 from qa_authoring.application.delete_answer_audio.handler import DeleteAnswerAudioHandler
 from qa_authoring.application.delete_category.handler import DeleteCategoryHandler
+from qa_authoring.application.delete_documentation.handler import DeleteDocumentationHandler
 from qa_authoring.application.delete_intent.handler import DeleteIntentHandler
 from qa_authoring.application.delete_language.handler import DeleteLanguageHandler
 from qa_authoring.application.delete_project.handler import DeleteProjectHandler
@@ -34,6 +38,9 @@ from qa_authoring.application.get_audio_playback_url.handler import GetAudioPlay
 from qa_authoring.application.get_audio_validation.handler import GetAudioValidationHandler
 from qa_authoring.application.get_category.handler import GetCategoryHandler
 from qa_authoring.application.get_clinical_validation.handler import GetClinicalValidationHandler
+from qa_authoring.application.get_documentation_download_url.handler import (
+    GetDocumentationDownloadUrlHandler,
+)
 from qa_authoring.application.get_intent.handler import GetIntentHandler
 from qa_authoring.application.get_language.handler import GetLanguageHandler
 from qa_authoring.application.get_project.handler import GetProjectHandler
@@ -49,6 +56,7 @@ from qa_authoring.application.get_user.handler import GetUserHandler
 from qa_authoring.application.link_answers.handler import LinkAnswersHandler
 from qa_authoring.application.link_variants.handler import LinkVariantsHandler
 from qa_authoring.application.list_categories.handler import ListCategoriesHandler
+from qa_authoring.application.list_documentation.handler import ListDocumentationHandler
 from qa_authoring.application.list_intents.handler import ListIntentsHandler
 from qa_authoring.application.list_languages.handler import ListLanguagesHandler
 from qa_authoring.application.list_projects.handler import ListProjectsHandler
@@ -89,8 +97,14 @@ from qa_authoring.application.update_question_variant.handler import UpdateQuest
 from qa_authoring.application.update_role.handler import UpdateRoleHandler
 from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 from qa_authoring.application.update_user.handler import UpdateUserHandler
+from qa_authoring.application.upload_documentation.handler import UploadDocumentationHandler
 from qa_authoring.application.validation_reset import ValidationResetter
 from qa_authoring.application.validation_support import BaseLanguageResolver, DecisionRecorder
+from qa_authoring.infrastructure.completeness.llm_completeness_analyzer import (
+    LlmCompletenessAnalyzer,
+    UnavailableCompletenessAnalyzer,
+)
+from qa_authoring.infrastructure.extraction.text_extractor import TextDocumentExtractor
 from qa_authoring.infrastructure.generation.llm_variant_generator import (
     LlmVariantGenerator,
     UnavailableVariantGenerator,
@@ -101,8 +115,11 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from qa_authoring.application.audio_policy import AudioPolicy
+    from qa_authoring.application.documentation_policy import DocumentationPolicy
     from qa_authoring.application.ports.audio_probe import AudioProbePort
     from qa_authoring.application.ports.audio_storage import AudioStoragePort
+    from qa_authoring.application.ports.completeness_analyzer import CompletenessAnalyzerPort
+    from qa_authoring.application.ports.document_storage import DocumentStoragePort
     from qa_authoring.application.ports.llm import LlmPort
     from qa_authoring.application.ports.prompt_templates import PromptTemplatePort
     from qa_authoring.application.ports.translator import TranslatorPort
@@ -128,8 +145,12 @@ class Container:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         llm: LlmPort | None = None,
         google_translator: TranslatorPort | None = None,
+        documentation_storage: DocumentStoragePort | None = None,
+        documentation_policy: DocumentationPolicy | None = None,
     ) -> None:
         self._unit_of_work = unit_of_work
+        self._documentation_storage = documentation_storage
+        self._documentation_policy = documentation_policy
         self._llm = llm
         self._google_translator = google_translator
         self._audio_storage = audio_storage
@@ -173,6 +194,20 @@ class Container:
         if self._llm is None:
             return UnavailableVariantGenerator()
         return LlmVariantGenerator(self.prompt_templates(uow), self._llm)
+
+    @property
+    def documentation_policy(self) -> DocumentationPolicy:
+        assert self._documentation_policy is not None, "documentation is not configured"
+        return self._documentation_policy
+
+    def _document_storage(self) -> DocumentStoragePort:
+        assert self._documentation_storage is not None, "documentation is not configured"
+        return self._documentation_storage
+
+    def _completeness_analyzer(self, uow: UnitOfWork) -> CompletenessAnalyzerPort:
+        if self._llm is None:
+            return UnavailableCompletenessAnalyzer()
+        return LlmCompletenessAnalyzer(self.prompt_templates(uow), self._llm)
 
     def _recorder(self, uow: UnitOfWork) -> DecisionRecorder:
         return DecisionRecorder(uow.validations, uow.users, self._clock)
@@ -442,3 +477,41 @@ class Container:
 
     def build_generate_variants(self, uow: UnitOfWork) -> GenerateVariantsHandler:
         return GenerateVariantsHandler(uow.qasets, uow.languages, self._variant_generator(uow))
+
+    def build_upload_documentation(self, uow: UnitOfWork) -> UploadDocumentationHandler:
+        return UploadDocumentationHandler(
+            uow.themes,
+            uow.documentation,
+            self._document_storage(),
+            self.documentation_policy,
+            self._clock,
+        )
+
+    def build_list_documentation(self, uow: UnitOfWork) -> ListDocumentationHandler:
+        return ListDocumentationHandler(uow.themes, uow.documentation)
+
+    def build_delete_documentation(self, uow: UnitOfWork) -> DeleteDocumentationHandler:
+        return DeleteDocumentationHandler(
+            uow.documentation, self._document_storage(), uow.after_commit
+        )
+
+    def build_get_documentation_download_url(
+        self, uow: UnitOfWork
+    ) -> GetDocumentationDownloadUrlHandler:
+        return GetDocumentationDownloadUrlHandler(
+            uow.documentation,
+            self._document_storage(),
+            self.documentation_policy,
+            self._clock,
+        )
+
+    def build_analyze_theme_completeness(self, uow: UnitOfWork) -> AnalyzeThemeCompletenessHandler:
+        return AnalyzeThemeCompletenessHandler(
+            uow.themes,
+            self._base_language(uow),
+            uow.languages,
+            uow.documentation,
+            uow.qasets,
+            TextDocumentExtractor(self._document_storage()),
+            self._completeness_analyzer(uow),
+        )

@@ -26,6 +26,8 @@ dependencies = [
     "google-cloud-storage",
     "google-cloud-translate>=3,<4",
     "google-genai>=2.33,<3",
+    "pypdf>=6,<7",
+    "python-docx>=1.1,<2",
 ]
 
 [project.optional-dependencies]

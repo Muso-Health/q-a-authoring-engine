@@ -7,6 +7,9 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from qa_authoring.application.ports.category_repository import CategoryRepository
+    from qa_authoring.application.ports.documentation_repository import (
+        DocumentationRepository,
+    )
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
@@ -36,6 +39,7 @@ class UnitOfWork(Protocol):
     roles: RoleRepository
     validations: ValidationRepository
     prompt_templates: PromptTemplateRepository
+    documentation: DocumentationRepository
 
     def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
         """Run ``action`` once the transaction has committed; best-effort, never rolled back.

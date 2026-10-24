@@ -55,6 +55,20 @@ class Settings(BaseSettings):
     audio_allowed_mime_types: str = "audio/webm,audio/ogg,audio/wav,audio/mpeg,audio/mp4"
     audio_ffprobe_path: str = "ffprobe"
 
+    # Theme documentation files, stored like audio: "local" (filesystem) or "gcs"
+    # (``documentation_bucket``), keyed by ``documentation_object_prefix`` + the content sha256.
+    documentation_storage_backend: str = "local"
+    documentation_bucket: str = ""
+    documentation_object_prefix: str = "documentation/"
+    documentation_local_directory: str = ".documentation-storage"
+    documentation_download_url_ttl_seconds: int = 900
+    documentation_max_upload_bytes: int = 100 * 1024 * 1024
+    documentation_allowed_mime_types: str = (
+        "application/pdf,"
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document,"
+        "text/plain,video/mp4,video/webm,video/quicktime,image/png,image/jpeg,image/webp"
+    )
+
     # Authentication. "entra" validates Microsoft Entra ID bearer tokens issued by
     # ``auth_entra_tenant`` for ``auth_entra_audience`` (both required then); "dev" trusts a plain
     # X-Dev-User header and must never face the internet. ``bootstrap_admin_email``, when set, is
@@ -91,6 +105,19 @@ class Settings(BaseSettings):
         if value not in {"local", "gcs"}:
             raise ValueError("audio_storage_backend must be 'local' or 'gcs'")
         return value
+
+    @field_validator("documentation_storage_backend")
+    @classmethod
+    def _known_documentation_backend(cls, value: str) -> str:
+        if value not in {"local", "gcs"}:
+            raise ValueError("documentation_storage_backend must be 'local' or 'gcs'")
+        return value
+
+    @property
+    def documentation_mime_types(self) -> frozenset[str]:
+        return frozenset(
+            m.strip() for m in self.documentation_allowed_mime_types.split(",") if m.strip()
+        )
 
     @field_validator("auth_provider")
     @classmethod

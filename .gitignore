@@ -22,3 +22,4 @@ htmlcov/
 
 # Local audio storage (QA_AUTHORING_AUDIO_STORAGE_BACKEND=local)
 .audio-storage/
+.documentation-storage/

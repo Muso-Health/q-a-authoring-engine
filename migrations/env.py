@@ -9,6 +9,7 @@ from sqlalchemy import text
 import qa_authoring.infrastructure.persistence.schema.access
 import qa_authoring.infrastructure.persistence.schema.catalog
 import qa_authoring.infrastructure.persistence.schema.category
+import qa_authoring.infrastructure.persistence.schema.documentation
 import qa_authoring.infrastructure.persistence.schema.intent
 import qa_authoring.infrastructure.persistence.schema.language
 import qa_authoring.infrastructure.persistence.schema.prompt_template

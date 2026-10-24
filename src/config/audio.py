@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 from qa_authoring.application.audio_policy import AudioPolicy
 from qa_authoring.infrastructure.audio.ffprobe import FfprobeAudioProbe
-from qa_authoring.infrastructure.audio.gcs_storage import GcsAudioStorage
-from qa_authoring.infrastructure.audio.local_storage import LocalAudioStorage
+from qa_authoring.infrastructure.storage.gcs import GcsBlobStorage
+from qa_authoring.infrastructure.storage.local import LocalBlobStorage
 
 if TYPE_CHECKING:
     from config.settings import Settings
@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 def audio_storage_from_settings(settings: Settings) -> AudioStoragePort:
     if settings.audio_storage_backend == "gcs":
-        return GcsAudioStorage(settings.audio_bucket, settings.audio_object_prefix)
-    return LocalAudioStorage(Path(settings.audio_local_directory), settings.audio_object_prefix)
+        return GcsBlobStorage(settings.audio_bucket, settings.audio_object_prefix)
+    return LocalBlobStorage(Path(settings.audio_local_directory), settings.audio_object_prefix)
 
 
 def audio_probe_from_settings(settings: Settings) -> AudioProbePort:

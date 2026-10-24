@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from apps.api.app import create_app
 from config.container import Container
 from qa_authoring.application.audio_policy import AudioPolicy
+from qa_authoring.application.documentation_policy import DocumentationPolicy
 from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAudioError
 from qa_authoring.application.ports.llm import LlmUnavailableError
 from qa_authoring.application.ports.translator import (
@@ -35,6 +36,9 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from qa_authoring.application.ports.category_repository import CategoryRepository
+    from qa_authoring.application.ports.documentation_repository import (
+        DocumentationRepository,
+    )
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
@@ -48,6 +52,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.user_repository import UserRepository
     from qa_authoring.application.ports.validation_repository import ValidationRepository
     from qa_authoring.domain.model.category import Category
+    from qa_authoring.domain.model.documentation import Documentation
     from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
@@ -378,13 +383,42 @@ class InMemoryPromptTemplateRepository:
         self.rows[template.key] = deepcopy(template)
 
 
-class InMemoryAudioStorage:
+class InMemoryDocumentationRepository:
     def __init__(self) -> None:
+        self.rows: dict[UUID, Documentation] = {}
+        self.events: list[str] = []
+
+    async def add(self, documentation: Documentation) -> None:
+        self.events.append("save")
+        self.rows[documentation.id] = documentation
+
+    async def get(self, documentation_id: UUID) -> Documentation | None:
+        return self.rows.get(documentation_id)
+
+    async def list_by_theme(self, theme_id: UUID) -> tuple[Documentation, ...]:
+        return tuple(d for d in self.rows.values() if d.theme_id == theme_id)
+
+    async def delete(self, documentation_id: UUID) -> None:
+        self.events.append("save")
+        self.rows.pop(documentation_id, None)
+
+    async def storage_uri_in_use(self, storage_uri: str) -> bool:
+        return any(d.storage_uri == storage_uri for d in self.rows.values())
+
+
+class InMemoryBlobStorage:
+    """Content-addressed like the real adapters: ``memory://<prefix>/<sha256>``."""
+
+    def __init__(self, prefix: str = "audio") -> None:
+        self.prefix = prefix
         self.blobs: dict[str, bytes] = {}
         self.events: list[str] = []
 
+    async def read(self, storage_uri: str) -> bytes:
+        return self.blobs[storage_uri]
+
     async def store(self, content: bytes, mime_type: str) -> str:
-        uri = f"memory://audio/{hashlib.sha256(content).hexdigest()}"
+        uri = f"memory://{self.prefix}/{hashlib.sha256(content).hexdigest()}"
         self.events.append(f"store {uri}")
         self.blobs[uri] = content
         return uri
@@ -395,6 +429,9 @@ class InMemoryAudioStorage:
 
     async def signed_url(self, storage_uri: str, ttl_seconds: int) -> str:
         return f"https://signed.example/{storage_uri.removeprefix('memory://')}?ttl={ttl_seconds}"
+
+
+InMemoryAudioStorage = InMemoryBlobStorage
 
 
 class FakeAudioProbe:
@@ -454,12 +491,34 @@ class FakeVariantGenerator:
         return tuple(f"{answer} ({language.name}) #{n}" for n in (1, 2))
 
 
+class FakeExtractor:
+    """``text of <filename>`` for documents, None for media; ``texts`` overrides by filename."""
+
+    def __init__(self) -> None:
+        self.texts: dict[str, str | None] = {}
+        self.calls: list[str] = []
+
+    async def extract(self, documentation: Documentation) -> str | None:
+        self.calls.append(documentation.filename)
+        if documentation.filename in self.texts:
+            return self.texts[documentation.filename]
+        if documentation.mime_type.startswith(("video/", "image/")):
+            return None
+        return f"text of {documentation.filename}"
+
+
 AUDIO_POLICY = AudioPolicy(
     max_upload_bytes=64,
     allowed_mime_types=frozenset({"audio/webm", "audio/ogg", "audio/wav"}),
     playback_url_ttl_seconds=300,
 )
 NOW = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+DOCUMENTATION_POLICY = DocumentationPolicy(
+    max_upload_bytes=256,
+    allowed_mime_types=frozenset({"application/pdf", DOCX, "text/plain", "video/mp4", "image/png"}),
+    download_url_ttl_seconds=600,
+)
 
 
 @dataclass
@@ -479,6 +538,12 @@ class InMemoryStore:
     prompt_templates: InMemoryPromptTemplateRepository = field(
         default_factory=InMemoryPromptTemplateRepository
     )
+    documentation: InMemoryDocumentationRepository = field(
+        default_factory=InMemoryDocumentationRepository
+    )
+    documentation_storage: InMemoryBlobStorage = field(
+        default_factory=lambda: InMemoryBlobStorage("documentation")
+    )
     llm: FakeLlm = field(default_factory=FakeLlm)
     google_translator: FakeGoogleTranslator = field(default_factory=FakeGoogleTranslator)
     events: list[str] = field(default_factory=list)
@@ -488,6 +553,8 @@ class InMemoryStore:
         # One timeline across storage, repository and commits, to assert their ordering.
         self.qasets.events = self.events
         self.audio_storage.events = self.events
+        self.documentation.events = self.events
+        self.documentation_storage.events = self.events
 
 
 class InMemoryUnitOfWork:
@@ -502,6 +569,7 @@ class InMemoryUnitOfWork:
     roles: RoleRepository
     validations: ValidationRepository
     prompt_templates: PromptTemplateRepository
+    documentation: DocumentationRepository
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -515,6 +583,7 @@ class InMemoryUnitOfWork:
         self.roles = store.roles
         self.validations = store.validations
         self.prompt_templates = store.prompt_templates
+        self.documentation = store.documentation
         self._events = store.events
         self._after_commit: list[Callable[[], Awaitable[None]]] = []
 
@@ -548,6 +617,8 @@ def in_memory_container() -> tuple[Container, InMemoryStore]:
         clock=lambda: NOW,
         llm=store.llm,
         google_translator=store.google_translator,
+        documentation_storage=store.documentation_storage,
+        documentation_policy=DOCUMENTATION_POLICY,
     )
     return container, store
 

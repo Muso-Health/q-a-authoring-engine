@@ -50,7 +50,7 @@ def _error(response: Any, status: int, code: str) -> dict[str, Any]:
 def test_list_and_get_the_seeded_defaults(setup: tuple[TestClient, InMemoryStore]) -> None:
     client, _ = setup
     items = _ok(client.get("/prompt-templates"))["items"]
-    assert [item["key"] for item in items] == ["translation", "variant_generation"]
+    assert [item["key"] for item in items] == ["completeness", "translation", "variant_generation"]
 
     translation = _ok(client.get("/prompt-templates/translation"))
     assert translation == {
@@ -99,9 +99,9 @@ def test_invalid_templates_are_422_with_the_placeholders(
 
 def test_unknown_keys_are_404(setup: tuple[TestClient, InMemoryStore]) -> None:
     client, _ = setup
-    _error(client.get("/prompt-templates/completeness"), 404, "prompt_template_not_found")
+    _error(client.get("/prompt-templates/summary"), 404, "prompt_template_not_found")
     _error(
-        client.put("/prompt-templates/completeness", json={"content": TRANSLATION}),
+        client.put("/prompt-templates/summary", json={"content": TRANSLATION}),
         404,
         "prompt_template_not_found",
     )

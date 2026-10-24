@@ -14,11 +14,13 @@ if TYPE_CHECKING:
 class PromptTemplateKey(StrEnum):
     """One key per use of a language model; the set is fixed by the code."""
 
+    COMPLETENESS = "completeness"
     TRANSLATION = "translation"
     VARIANT_GENERATION = "variant_generation"
 
 
 REQUIRED_PLACEHOLDERS: Mapping[PromptTemplateKey, frozenset[str]] = {
+    PromptTemplateKey.COMPLETENESS: frozenset({"documentation", "answers", "language"}),
     PromptTemplateKey.TRANSLATION: frozenset({"source_language", "target_language", "text"}),
     PromptTemplateKey.VARIANT_GENERATION: frozenset({"answer", "context", "language"}),
 }
@@ -156,6 +158,25 @@ def _aware(at: datetime) -> datetime:
 
 
 DEFAULT_TEMPLATES: Mapping[PromptTemplateKey, str] = {
+    PromptTemplateKey.COMPLETENESS: """\
+You review a clinically validated question-and-answer corpus for a community health programme \
+in Mali, to find what it does not yet cover.
+Below are the reference documentation of one theme and the answers the corpus already gives for \
+that theme. Reason and write in {language}.
+
+Identify the notions in the documentation that no answer covers: clinical facts, instructions, \
+doses, warning signs, prevention measures, or situations that a patient, a caregiver or a \
+community health worker would need, and that are missing from every answer. Ignore notions that \
+an answer already covers, even with different wording. Do not invent notions that are not in the \
+documentation.
+
+Documentation:
+{documentation}
+
+Answers already in the corpus:
+{answers}
+
+List each uncovered notion as one short phrase in {language}.""",
     PromptTemplateKey.TRANSLATION: """\
 You are a professional medical translator working for a community health programme in Mali.
 Translate the text below from {source_language} into {target_language}.

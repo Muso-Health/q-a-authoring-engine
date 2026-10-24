@@ -165,3 +165,32 @@ def test_llm_and_translation_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_llm_provider_must_be_known(monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
     with pytest.raises(ValidationError):
         _settings(monkeypatch, LLM_PROVIDER=provider)
+
+
+def test_documentation_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    defaults = _settings(monkeypatch)
+    assert defaults.documentation_storage_backend == "local"
+    assert "application/pdf" in defaults.documentation_mime_types
+    settings = _settings(
+        monkeypatch,
+        DOCUMENTATION_STORAGE_BACKEND="gcs",
+        DOCUMENTATION_BUCKET="qa-docs",
+        DOCUMENTATION_OBJECT_PREFIX="docs/",
+        DOCUMENTATION_DOWNLOAD_URL_TTL_SECONDS="60",
+        DOCUMENTATION_MAX_UPLOAD_BYTES="1024",
+        DOCUMENTATION_ALLOWED_MIME_TYPES="application/pdf, image/png",
+    )
+    assert (settings.documentation_bucket, settings.documentation_object_prefix) == (
+        "qa-docs",
+        "docs/",
+    )
+    assert (
+        settings.documentation_download_url_ttl_seconds,
+        settings.documentation_max_upload_bytes,
+    ) == (
+        60,
+        1024,
+    )
+    assert settings.documentation_mime_types == frozenset({"application/pdf", "image/png"})
+    with pytest.raises(ValidationError):
+        _settings(monkeypatch, DOCUMENTATION_STORAGE_BACKEND="s3")

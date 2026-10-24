@@ -6,8 +6,8 @@ import pytest
 
 from config.audio import audio_policy_from_settings, audio_storage_from_settings
 from config.settings import Settings
-from qa_authoring.infrastructure.audio.gcs_storage import GcsAudioStorage
-from qa_authoring.infrastructure.audio.local_storage import LocalAudioStorage
+from qa_authoring.infrastructure.storage.gcs import GcsBlobStorage
+from qa_authoring.infrastructure.storage.local import LocalBlobStorage
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -25,14 +25,14 @@ def test_local_storage_is_selected_by_default(
     storage = audio_storage_from_settings(
         _settings(monkeypatch, AUDIO_LOCAL_DIRECTORY=str(tmp_path))
     )
-    assert isinstance(storage, LocalAudioStorage)
+    assert isinstance(storage, LocalBlobStorage)
 
 
 def test_gcs_storage_is_selected_by_config(monkeypatch: pytest.MonkeyPatch) -> None:
     storage = audio_storage_from_settings(
         _settings(monkeypatch, AUDIO_STORAGE_BACKEND="gcs", AUDIO_BUCKET="qa-audio")
     )
-    assert isinstance(storage, GcsAudioStorage)
+    assert isinstance(storage, GcsBlobStorage)
 
 
 def test_gcs_storage_needs_a_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
