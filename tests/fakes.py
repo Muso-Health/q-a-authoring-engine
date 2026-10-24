@@ -12,6 +12,7 @@ from apps.api.app import create_app
 from config.container import Container
 from qa_authoring.application.audio_policy import AudioPolicy
 from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAudioError
+from qa_authoring.application.qaset_views import QASetViews
 from qa_authoring.application.role_errors import RoleInUseError, RoleNameExistsError
 from qa_authoring.application.user_errors import EmailAlreadyExistsError
 from qa_authoring.domain.model.intent import normalize_intent_text
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.application.ports.user_repository import UserRepository
+    from qa_authoring.application.ports.validation_repository import ValidationRepository
     from qa_authoring.domain.model.category import Category
     from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
@@ -42,6 +44,11 @@ if TYPE_CHECKING:
     from qa_authoring.domain.model.protocol import Protocol
     from qa_authoring.domain.model.qaset import AudioReference, QASet
     from qa_authoring.domain.model.theme import Theme
+    from qa_authoring.domain.model.validation import (
+        Validation,
+        ValidationState,
+        ValidationSubject,
+    )
     from qa_authoring.domain.value_objects.language_code import LanguageCode
 
 
@@ -170,6 +177,16 @@ class InMemoryQASetRepository:
 
     async def storage_uri_in_use(self, storage_uri: str) -> bool:
         return any(a.storage_uri == storage_uri for row in self.rows.values() for a in row.audios)
+
+    async def find_by_answer(self, answer_id: UUID) -> QASet | None:
+        row = next((r for r in self.rows.values() if answer_id in {a.id for a in r.answers}), None)
+        return None if row is None else deepcopy(row)
+
+    async def find_by_variant(self, variant_id: UUID) -> QASet | None:
+        row = next(
+            (r for r in self.rows.values() if variant_id in {v.id for v in r.variants}), None
+        )
+        return None if row is None else deepcopy(row)
 
     async def delete(self, qaset_id: UUID) -> None:
         self.rows.pop(qaset_id, None)
@@ -310,6 +327,27 @@ class InMemoryUserRepository:
         return any(role_id in u.role_ids for u in self.rows.values())
 
 
+class InMemoryValidationRepository:
+    def __init__(self) -> None:
+        self.rows: dict[ValidationSubject, Validation] = {}
+
+    async def get_for(self, subject: ValidationSubject) -> Validation | None:
+        row = self.rows.get(subject)
+        return None if row is None else deepcopy(row)
+
+    async def add(self, validation: Validation) -> None:
+        assert validation.subject not in self.rows, "one validation per subject"
+        self.rows[validation.subject] = deepcopy(validation)
+
+    async def save(self, validation: Validation) -> None:
+        self.rows[validation.subject] = deepcopy(validation)
+
+    async def current_states(
+        self, subjects: set[ValidationSubject]
+    ) -> dict[ValidationSubject, ValidationState]:
+        return {s: self.rows[s].current_state for s in subjects if s in self.rows}
+
+
 class InMemoryAudioStorage:
     def __init__(self) -> None:
         self.blobs: dict[str, bytes] = {}
@@ -363,6 +401,7 @@ class InMemoryStore:
     audio_probe: FakeAudioProbe = field(default_factory=FakeAudioProbe)
     users: InMemoryUserRepository = field(default_factory=InMemoryUserRepository)
     roles: InMemoryRoleRepository = field(default_factory=InMemoryRoleRepository)
+    validations: InMemoryValidationRepository = field(default_factory=InMemoryValidationRepository)
     events: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -382,6 +421,7 @@ class InMemoryUnitOfWork:
     categories: CategoryRepository
     users: UserRepository
     roles: RoleRepository
+    validations: ValidationRepository
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -393,6 +433,7 @@ class InMemoryUnitOfWork:
         self.categories = store.categories
         self.users = store.users
         self.roles = store.roles
+        self.validations = store.validations
         self._events = store.events
         self._after_commit: list[Callable[[], Awaitable[None]]] = []
 
@@ -447,3 +488,7 @@ def admin_client(container: Container, store: InMemoryStore) -> TestClient:
     seed_user(store, ADMIN_EMAIL, *Permission)
     app = create_app(container=container, identity_provider=DevIdentityProvider())
     return TestClient(app, headers={"X-Dev-User": ADMIN_EMAIL})
+
+
+def views(store: InMemoryStore) -> QASetViews:
+    return QASetViews(store.intents, store.categories, store.validations)

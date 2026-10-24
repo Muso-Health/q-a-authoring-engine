@@ -94,6 +94,7 @@ def test_upload_answer_audio_and_read_it(
         "duration_ms": 1500,
         "size_bytes": 5,
         "checksum_sha256": checksum,
+        "audio_validation": None,
     }
     assert _ok(client.get(f"/audios/{body['audio_id']}"), 200) == body
     assert list(store.audio_storage.blobs) == [f"memory://audio/{checksum}"]

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from qa_authoring.application.qaset_errors import UnknownLanguageError
 from qa_authoring.application.qaset_loading import load_qaset
-from qa_authoring.application.qaset_response import LanguagePresenceResult
+from qa_authoring.application.qaset_response import NO_LOOKUPS, LanguagePresenceResult
 
 if TYPE_CHECKING:
     from qa_authoring.application.add_language_presence.command import (
@@ -27,4 +27,4 @@ class AddLanguagePresenceHandler:
             raise UnknownLanguageError(command.language_id)
         qaset.add_language(command.language_id, command.answer_text)
         await self._qasets.save(qaset)
-        return LanguagePresenceResult.of(qaset, qaset.presence(command.language_id), {})
+        return LanguagePresenceResult.of(qaset, qaset.presence(command.language_id), NO_LOOKUPS)

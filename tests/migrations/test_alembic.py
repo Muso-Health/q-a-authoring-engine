@@ -50,7 +50,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0010_access",)]
+    assert versions == [("0011_validations",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -128,6 +128,27 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("fk_themes_protocol_id_protocols", "themes", "protocols", "RESTRICT"),
         ("fk_user_roles_role_id_roles", "user_roles", "roles", "RESTRICT"),
         ("fk_user_roles_user_id_users", "user_roles", "users", "CASCADE"),
+        (
+            "fk_validation_events_actor_user_id_users",
+            "validation_events",
+            "users",
+            "RESTRICT",
+        ),
+        (
+            "fk_validation_events_validation_id_validations",
+            "validation_events",
+            "validations",
+            "CASCADE",
+        ),
+        ("fk_validations_answer_id_answers", "validations", "answers", "CASCADE"),
+        ("fk_validations_audio_id_audios", "validations", "audios", "CASCADE"),
+        ("fk_validations_qaset_id_qasets", "validations", "qasets", "CASCADE"),
+        (
+            "fk_validations_variant_id_question_variants",
+            "validations",
+            "question_variants",
+            "CASCADE",
+        ),
         ("fk_variant_intents_intent_id_intents", "variant_intents", "intents", "RESTRICT"),
         (
             "fk_variant_intents_variant_id_question_variants",
@@ -227,6 +248,28 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     assert [name for name, _ in user_indexes] == ["uq_users_email_lower", "uq_users_subject"]
     assert "lower(email)" in str(user_indexes[0][1])
     assert "WHERE (subject IS NOT NULL)" in str(user_indexes[1][1])
+    validation_constraints = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' "
+            "AND table_name IN ('validations', 'validation_events') "
+            "AND constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'CHECK') "
+            "AND constraint_name NOT LIKE '%not_null' ORDER BY constraint_name",
+        )
+    )
+    assert validation_constraints == [
+        ("ck_validation_events_states", "CHECK"),
+        ("ck_validations_current_state", "CHECK"),
+        ("ck_validations_subject_matches_kind", "CHECK"),
+        ("pk_validation_events", "PRIMARY KEY"),
+        ("pk_validations", "PRIMARY KEY"),
+        ("uq_validation_events_validation_id_sequence", "UNIQUE"),
+        ("uq_validations_answer_id", "UNIQUE"),
+        ("uq_validations_audio_id", "UNIQUE"),
+        ("uq_validations_qaset_id", "UNIQUE"),
+        ("uq_validations_variant_id", "UNIQUE"),
+    ]
     unique = asyncio.run(
         _query(
             postgres_url,
@@ -256,6 +299,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_question_variants_qaset_id_language_id",),
         ("ix_themes_protocol_id",),
         ("ix_user_roles_role_id",),
+        ("ix_validation_events_actor_user_id",),
+        ("ix_validations_current_state",),
         ("ix_variant_intents_intent_id",),
         ("ix_variant_intents_variant_id",),
         ("ix_variant_translation_links_variant_high_id",),
@@ -292,7 +337,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
                 f"WHERE table_schema = '{SCHEMA}' AND (column_name = 'created_at' "
                 "OR table_name LIKE '%translation_links' OR table_name LIKE '%intents' "
                 "OR table_name LIKE '%categories' OR table_name = 'audios' "
-                "OR table_name IN ('users', 'roles', 'role_permissions', 'user_roles'))",
+                "OR table_name IN ('users', 'roles', 'role_permissions', 'user_roles', "
+                "'validations', 'validation_events'))",
             )
         )
         == []

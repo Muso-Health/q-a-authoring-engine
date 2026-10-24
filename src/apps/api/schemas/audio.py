@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from apps.api.schemas.validation import ValidationStateResponse
+
 if TYPE_CHECKING:
     from qa_authoring.application.audio_response import AudioResult, PlaybackUrlResult
     from qa_authoring.application.qaset_response import AudioSummaryResult
@@ -19,6 +21,7 @@ class AudioSummaryResponse(BaseModel):
     duration_ms: int
     size_bytes: int
     checksum_sha256: str
+    audio_validation: ValidationStateResponse | None
 
     @classmethod
     def of(cls, result: AudioSummaryResult | None) -> AudioSummaryResponse | None:
@@ -30,6 +33,7 @@ class AudioSummaryResponse(BaseModel):
             duration_ms=result.duration_ms,
             size_bytes=result.size_bytes,
             checksum_sha256=result.checksum_sha256,
+            audio_validation=ValidationStateResponse.of(result.audio_validation),
         )
 
 

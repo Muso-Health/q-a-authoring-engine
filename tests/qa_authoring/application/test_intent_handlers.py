@@ -26,7 +26,7 @@ from qa_authoring.domain.model.qaset import (
     QuestionVariantNotFoundError,
 )
 from qa_authoring.domain.value_objects.naming import InvalidTextError
-from tests.fakes import InMemoryStore
+from tests.fakes import InMemoryStore, views
 
 FR = uuid4()
 
@@ -49,7 +49,7 @@ async def _qaset(store: InMemoryStore) -> tuple[QASet, UUID]:
 
 
 async def _attach(store: InMemoryStore, qaset_id: UUID, variant_id: UUID, intent_id: UUID) -> bool:
-    _, created = await AttachIntentHandler(store.qasets, store.intents)(
+    _, created = await AttachIntentHandler(store.qasets, store.intents, views(store))(
         AttachIntentCommand(qaset_id=qaset_id, variant_id=variant_id, intent_id=intent_id)
     )
     return created
@@ -144,7 +144,7 @@ async def test_attach_twice_is_idempotent(store: InMemoryStore) -> None:
 async def test_attach_returns_the_variant_with_its_intents(store: InMemoryStore) -> None:
     intent_id = await _register(store, "Dosage")
     qaset, variant_id = await _qaset(store)
-    result, _ = await AttachIntentHandler(store.qasets, store.intents)(
+    result, _ = await AttachIntentHandler(store.qasets, store.intents, views(store))(
         AttachIntentCommand(qaset_id=qaset.id, variant_id=variant_id, intent_id=intent_id)
     )
     assert result.id == variant_id
@@ -173,9 +173,7 @@ async def test_get_qaset_shows_intents_in_attachment_order(store: InMemoryStore)
     await _attach(store, qaset.id, variant_id, first)
     await _attach(store, qaset.id, variant_id, second)
 
-    result = await GetQASetHandler(store.qasets, store.intents, store.categories)(
-        GetQASetQuery(qaset.id)
-    )
+    result = await GetQASetHandler(store.qasets, views(store))(GetQASetQuery(qaset.id))
 
     [variant] = result.languages[0].variants
     assert [(i.intent_id, i.text) for i in variant.intents] == [

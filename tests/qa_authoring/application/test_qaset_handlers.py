@@ -53,7 +53,7 @@ from qa_authoring.domain.model.qaset import (
 from qa_authoring.domain.model.theme import Theme
 from qa_authoring.domain.value_objects.language_code import LanguageCode
 from qa_authoring.domain.value_objects.naming import InvalidTextError
-from tests.fakes import InMemoryStore
+from tests.fakes import InMemoryStore, views
 
 
 @pytest.fixture
@@ -174,14 +174,14 @@ async def test_update_answer(store: InMemoryStore) -> None:
     fr = await _language(store, "fr")
     qaset_id = await _qaset(store, await _theme(store), fr)
 
-    presence = await UpdateAnswerHandler(store.qasets, store.intents)(
+    presence = await UpdateAnswerHandler(store.qasets, views(store))(
         UpdateAnswerCommand(qaset_id=qaset_id, language_id=fr, text="Drink water.")
     )
 
     assert presence.answer.text == "Drink water."
     assert store.qasets.rows[qaset_id].presence(fr).answer.text == "Drink water."
     with pytest.raises(LanguageNotPresentError):
-        await UpdateAnswerHandler(store.qasets, store.intents)(
+        await UpdateAnswerHandler(store.qasets, views(store))(
             UpdateAnswerCommand(qaset_id=qaset_id, language_id=uuid4(), text="x")
         )
 
@@ -222,7 +222,7 @@ async def test_update_and_delete_variant(store: InMemoryStore) -> None:
     qaset_id = await _qaset(store, await _theme(store), fr)
     variant_id = await _add_variant(store, qaset_id, fr, "What to do?")
 
-    updated = await UpdateQuestionVariantHandler(store.qasets, store.intents)(
+    updated = await UpdateQuestionVariantHandler(store.qasets, views(store))(
         UpdateQuestionVariantCommand(qaset_id=qaset_id, variant_id=variant_id, text="Now what?")
     )
     assert (updated.id, updated.language_id, updated.text) == (variant_id, fr, "Now what?")
@@ -248,16 +248,14 @@ async def test_get_groups_by_language_with_variant_counts(store: InMemoryStore) 
     await _add_variant(store, qaset_id, fr, "Two")
     await _add_variant(store, qaset_id, bm, "Three")
 
-    result = await GetQASetHandler(store.qasets, store.intents, store.categories)(
-        GetQASetQuery(qaset_id)
-    )
+    result = await GetQASetHandler(store.qasets, views(store))(GetQASetQuery(qaset_id))
 
     by_language = {p.language_id: p for p in result.languages}
     assert {lang: p.variant_count for lang, p in by_language.items()} == {fr: 2, bm: 1}
     assert {v.text for v in by_language[fr].variants} == {"One", "Two"}
     assert all(v.language_id == fr for v in by_language[fr].variants)
     with pytest.raises(QASetNotFoundError):
-        await GetQASetHandler(store.qasets, store.intents, store.categories)(GetQASetQuery(uuid4()))
+        await GetQASetHandler(store.qasets, views(store))(GetQASetQuery(uuid4()))
 
 
 async def test_list_by_theme_returns_only_its_qasets(store: InMemoryStore) -> None:

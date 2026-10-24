@@ -30,7 +30,9 @@ from qa_authoring.application.delete_variant_audio.handler import DeleteVariantA
 from qa_authoring.application.detach_intent.handler import DetachIntentHandler
 from qa_authoring.application.get_audio.handler import GetAudioHandler
 from qa_authoring.application.get_audio_playback_url.handler import GetAudioPlaybackUrlHandler
+from qa_authoring.application.get_audio_validation.handler import GetAudioValidationHandler
 from qa_authoring.application.get_category.handler import GetCategoryHandler
+from qa_authoring.application.get_clinical_validation.handler import GetClinicalValidationHandler
 from qa_authoring.application.get_intent.handler import GetIntentHandler
 from qa_authoring.application.get_language.handler import GetLanguageHandler
 from qa_authoring.application.get_project.handler import GetProjectHandler
@@ -38,6 +40,9 @@ from qa_authoring.application.get_protocol.handler import GetProtocolHandler
 from qa_authoring.application.get_qaset.handler import GetQASetHandler
 from qa_authoring.application.get_role.handler import GetRoleHandler
 from qa_authoring.application.get_theme.handler import GetThemeHandler
+from qa_authoring.application.get_translation_validation.handler import (
+    GetTranslationValidationHandler,
+)
 from qa_authoring.application.get_user.handler import GetUserHandler
 from qa_authoring.application.link_answers.handler import LinkAnswersHandler
 from qa_authoring.application.link_variants.handler import LinkVariantsHandler
@@ -50,6 +55,12 @@ from qa_authoring.application.list_qasets.handler import ListQASetsHandler
 from qa_authoring.application.list_roles.handler import ListRolesHandler
 from qa_authoring.application.list_themes.handler import ListThemesHandler
 from qa_authoring.application.list_users.handler import ListUsersHandler
+from qa_authoring.application.qaset_views import QASetViews
+from qa_authoring.application.record_audio_decision.handler import RecordAudioDecisionHandler
+from qa_authoring.application.record_clinical_decision.handler import RecordClinicalDecisionHandler
+from qa_authoring.application.record_translation_decision.handler import (
+    RecordTranslationDecisionHandler,
+)
 from qa_authoring.application.register_category.handler import RegisterCategoryHandler
 from qa_authoring.application.register_intent.handler import RegisterIntentHandler
 from qa_authoring.application.register_language.handler import RegisterLanguageHandler
@@ -69,6 +80,7 @@ from qa_authoring.application.update_question_variant.handler import UpdateQuest
 from qa_authoring.application.update_role.handler import UpdateRoleHandler
 from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 from qa_authoring.application.update_user.handler import UpdateUserHandler
+from qa_authoring.application.validation_support import BaseLanguageResolver, DecisionRecorder
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -105,6 +117,17 @@ class Container:
     @property
     def audio_policy(self) -> AudioPolicy:
         return self._audio_policy
+
+    @staticmethod
+    def _views(uow: UnitOfWork) -> QASetViews:
+        return QASetViews(uow.intents, uow.categories, uow.validations)
+
+    @staticmethod
+    def _base_language(uow: UnitOfWork) -> BaseLanguageResolver:
+        return BaseLanguageResolver(uow.themes, uow.protocols, uow.projects)
+
+    def _recorder(self, uow: UnitOfWork) -> DecisionRecorder:
+        return DecisionRecorder(uow.validations, uow.users, self._clock)
 
     async def run[C, R](
         self,
@@ -181,7 +204,7 @@ class Container:
         return AddLanguagePresenceHandler(uow.qasets, uow.languages)
 
     def build_update_answer(self, uow: UnitOfWork) -> UpdateAnswerHandler:
-        return UpdateAnswerHandler(uow.qasets, uow.intents)
+        return UpdateAnswerHandler(uow.qasets, self._views(uow))
 
     def build_remove_language_presence(self, uow: UnitOfWork) -> RemoveLanguagePresenceHandler:
         return RemoveLanguagePresenceHandler(uow.qasets)
@@ -190,13 +213,13 @@ class Container:
         return AddQuestionVariantHandler(uow.qasets)
 
     def build_update_question_variant(self, uow: UnitOfWork) -> UpdateQuestionVariantHandler:
-        return UpdateQuestionVariantHandler(uow.qasets, uow.intents)
+        return UpdateQuestionVariantHandler(uow.qasets, self._views(uow))
 
     def build_delete_question_variant(self, uow: UnitOfWork) -> DeleteQuestionVariantHandler:
         return DeleteQuestionVariantHandler(uow.qasets)
 
     def build_get_qaset(self, uow: UnitOfWork) -> GetQASetHandler:
-        return GetQASetHandler(uow.qasets, uow.intents, uow.categories)
+        return GetQASetHandler(uow.qasets, self._views(uow))
 
     def build_list_qasets(self, uow: UnitOfWork) -> ListQASetsHandler:
         return ListQASetsHandler(uow.qasets, uow.themes)
@@ -229,7 +252,7 @@ class Container:
         return DeleteIntentHandler(uow.intents, uow.qasets)
 
     def build_attach_intent(self, uow: UnitOfWork) -> AttachIntentHandler:
-        return AttachIntentHandler(uow.qasets, uow.intents)
+        return AttachIntentHandler(uow.qasets, uow.intents, self._views(uow))
 
     def build_detach_intent(self, uow: UnitOfWork) -> DetachIntentHandler:
         return DetachIntentHandler(uow.qasets)
@@ -247,7 +270,7 @@ class Container:
         return DeleteCategoryHandler(uow.categories, uow.qasets)
 
     def build_add_category(self, uow: UnitOfWork) -> AddCategoryHandler:
-        return AddCategoryHandler(uow.qasets, uow.intents, uow.categories)
+        return AddCategoryHandler(uow.qasets, uow.categories, self._views(uow))
 
     def build_remove_category(self, uow: UnitOfWork) -> RemoveCategoryHandler:
         return RemoveCategoryHandler(uow.qasets)
@@ -314,3 +337,27 @@ class Container:
 
     def build_bootstrap_admin(self, uow: UnitOfWork) -> BootstrapAdminHandler:
         return BootstrapAdminHandler(uow.users, uow.roles)
+
+    def build_record_clinical_decision(self, uow: UnitOfWork) -> RecordClinicalDecisionHandler:
+        return RecordClinicalDecisionHandler(
+            uow.qasets, self._base_language(uow), self._recorder(uow)
+        )
+
+    def build_record_translation_decision(
+        self, uow: UnitOfWork
+    ) -> RecordTranslationDecisionHandler:
+        return RecordTranslationDecisionHandler(
+            uow.qasets, self._base_language(uow), self._recorder(uow)
+        )
+
+    def build_record_audio_decision(self, uow: UnitOfWork) -> RecordAudioDecisionHandler:
+        return RecordAudioDecisionHandler(uow.qasets, self._recorder(uow))
+
+    def build_get_clinical_validation(self, uow: UnitOfWork) -> GetClinicalValidationHandler:
+        return GetClinicalValidationHandler(uow.qasets, self._recorder(uow))
+
+    def build_get_translation_validation(self, uow: UnitOfWork) -> GetTranslationValidationHandler:
+        return GetTranslationValidationHandler(uow.qasets, self._recorder(uow))
+
+    def build_get_audio_validation(self, uow: UnitOfWork) -> GetAudioValidationHandler:
+        return GetAudioValidationHandler(uow.qasets, self._recorder(uow))

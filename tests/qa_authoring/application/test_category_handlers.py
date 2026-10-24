@@ -22,7 +22,7 @@ from qa_authoring.application.remove_category.command import RemoveCategoryComma
 from qa_authoring.application.remove_category.handler import RemoveCategoryHandler
 from qa_authoring.domain.model.qaset import CategoryNotAttachedError, QASet
 from qa_authoring.domain.value_objects.naming import InvalidNameError
-from tests.fakes import InMemoryStore
+from tests.fakes import InMemoryStore, views
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ async def _qaset(store: InMemoryStore) -> QASet:
 
 
 def _add(store: InMemoryStore) -> AddCategoryHandler:
-    return AddCategoryHandler(store.qasets, store.intents, store.categories)
+    return AddCategoryHandler(store.qasets, store.categories, views(store))
 
 
 # --- catalogue ---
@@ -156,9 +156,7 @@ async def test_get_qaset_shows_categories_in_attachment_order(store: InMemorySto
     for category_id in (first, second):
         await _add(store)(AddCategoryCommand(qaset_id=qaset.id, category_id=category_id))
 
-    result = await GetQASetHandler(store.qasets, store.intents, store.categories)(
-        GetQASetQuery(qaset.id)
-    )
+    result = await GetQASetHandler(store.qasets, views(store))(GetQASetQuery(qaset.id))
 
     assert [(c.category_id, c.name) for c in result.categories] == [
         (first, "Nutrition"),

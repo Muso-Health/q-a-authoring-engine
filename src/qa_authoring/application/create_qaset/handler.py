@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from qa_authoring.application.qaset_errors import UnknownLanguageError
-from qa_authoring.application.qaset_response import QASetResult
+from qa_authoring.application.qaset_response import NO_LOOKUPS, QASetResult
 from qa_authoring.application.theme_errors import ThemeNotFoundError
 from qa_authoring.domain.model.qaset import QASet
 
@@ -35,4 +35,4 @@ class CreateQASetHandler:
             answer_text=command.answer_text,
         )
         await self._qasets.add(qaset)
-        return QASetResult.of(qaset, {}, {})
+        return QASetResult.of(qaset, NO_LOOKUPS)

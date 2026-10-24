@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from qa_authoring.application.category_errors import CategoryNotFoundError
-from qa_authoring.application.qaset_loading import category_names, intent_texts, load_qaset
-from qa_authoring.application.qaset_response import QASetResult
+from qa_authoring.application.qaset_loading import load_qaset
 
 if TYPE_CHECKING:
     from qa_authoring.application.add_category.command import AddCategoryCommand
     from qa_authoring.application.ports.category_repository import CategoryRepository
-    from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
+    from qa_authoring.application.qaset_response import QASetResult
+    from qa_authoring.application.qaset_views import QASetViews
 
 
 class AddCategoryHandler:
@@ -18,14 +18,11 @@ class AddCategoryHandler:
     attachment was created."""
 
     def __init__(
-        self,
-        qasets: QASetRepository,
-        intents: IntentRepository,
-        categories: CategoryRepository,
+        self, qasets: QASetRepository, categories: CategoryRepository, views: QASetViews
     ) -> None:
         self._qasets = qasets
-        self._intents = intents
         self._categories = categories
+        self._views = views
 
     async def __call__(self, command: AddCategoryCommand) -> tuple[QASetResult, bool]:
         qaset = await load_qaset(self._qasets, command.qaset_id)
@@ -34,9 +31,4 @@ class AddCategoryHandler:
         created = qaset.add_category(command.category_id)
         if created:
             await self._qasets.save(qaset)
-        result = QASetResult.of(
-            qaset,
-            await intent_texts(self._intents, qaset),
-            await category_names(self._categories, qaset),
-        )
-        return result, created
+        return await self._views.qaset(qaset), created

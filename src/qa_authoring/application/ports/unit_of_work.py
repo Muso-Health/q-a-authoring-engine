@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.application.ports.user_repository import UserRepository
+    from qa_authoring.application.ports.validation_repository import ValidationRepository
 
 
 class UnitOfWork(Protocol):
@@ -30,6 +31,7 @@ class UnitOfWork(Protocol):
     categories: CategoryRepository
     users: UserRepository
     roles: RoleRepository
+    validations: ValidationRepository
 
     def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
         """Run ``action`` once the transaction has committed; best-effort, never rolled back.

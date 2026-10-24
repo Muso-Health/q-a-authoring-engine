@@ -7,8 +7,6 @@ from qa_authoring.application.qaset_errors import QASetNotFoundError
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from qa_authoring.application.ports.category_repository import CategoryRepository
-    from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.domain.model.qaset import QASet
 
@@ -18,20 +16,3 @@ async def load_qaset(qasets: QASetRepository, qaset_id: UUID) -> QASet:
     if qaset is None:
         raise QASetNotFoundError(qaset_id)
     return qaset
-
-
-async def intent_texts(intents: IntentRepository, qaset: QASet) -> dict[UUID, str]:
-    """Catalogue text of every intent attached to the QA set's variants."""
-    ids = {intent_id for variant in qaset.variants for intent_id in variant.intent_ids}
-    if not ids:
-        return {}
-    return {intent_id: intent.text for intent_id, intent in (await intents.get_many(ids)).items()}
-
-
-async def category_names(categories: CategoryRepository, qaset: QASet) -> dict[UUID, str]:
-    """Catalogue name of every category attached to the QA set."""
-    ids = set(qaset.category_ids)
-    if not ids:
-        return {}
-    found = await categories.get_many(ids)
-    return {category_id: category.name for category_id, category in found.items()}

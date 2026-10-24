@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from apps.api.schemas.audio import AudioSummaryResponse
+from apps.api.schemas.validation import ValidationStateResponse
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -118,6 +119,7 @@ class AnswerResponse(BaseModel):
     text: str
     links: list[TranslationResponse]
     audio: AudioSummaryResponse | None
+    translation_validation: ValidationStateResponse | None
 
 
 class QuestionVariantResponse(BaseModel):
@@ -127,6 +129,7 @@ class QuestionVariantResponse(BaseModel):
     links: list[TranslationResponse]
     intents: list[AttachedIntentResponse]
     audio: AudioSummaryResponse | None
+    translation_validation: ValidationStateResponse | None
 
     @classmethod
     def of(cls, result: QuestionVariantResult) -> QuestionVariantResponse:
@@ -137,6 +140,7 @@ class QuestionVariantResponse(BaseModel):
             links=[TranslationResponse.of(link) for link in result.links],
             intents=[AttachedIntentResponse.of(intent) for intent in result.intents],
             audio=AudioSummaryResponse.of(result.audio),
+            translation_validation=ValidationStateResponse.of(result.translation_validation),
         )
 
 
@@ -155,6 +159,9 @@ class LanguagePresenceResponse(BaseModel):
                 text=result.answer.text,
                 links=[TranslationResponse.of(link) for link in result.answer.links],
                 audio=AudioSummaryResponse.of(result.answer.audio),
+                translation_validation=ValidationStateResponse.of(
+                    result.answer.translation_validation
+                ),
             ),
             variants=[QuestionVariantResponse.of(v) for v in result.variants],
             variant_count=result.variant_count,
@@ -166,6 +173,7 @@ class QASetResponse(BaseModel):
     theme_id: UUID
     languages: list[LanguagePresenceResponse]
     categories: list[AttachedCategoryResponse]
+    clinical_validation: ValidationStateResponse | None
 
     @classmethod
     def of(cls, result: QASetResult) -> QASetResponse:
@@ -174,6 +182,7 @@ class QASetResponse(BaseModel):
             theme_id=result.theme_id,
             languages=[LanguagePresenceResponse.of(p) for p in result.languages],
             categories=[AttachedCategoryResponse.of(c) for c in result.categories],
+            clinical_validation=ValidationStateResponse.of(result.clinical_validation),
         )
 
 

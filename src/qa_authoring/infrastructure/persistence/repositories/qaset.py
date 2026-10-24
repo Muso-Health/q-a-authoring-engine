@@ -161,6 +161,18 @@ class PostgresQASetRepository:
         ).one_or_none()
         return None if row is None else _audio(row)
 
+    async def find_by_answer(self, answer_id: UUID) -> QASet | None:
+        qaset_id = await self._connection.scalar(
+            select(answers.c.qaset_id).where(answers.c.id == answer_id)
+        )
+        return None if qaset_id is None else await self.get(qaset_id)
+
+    async def find_by_variant(self, variant_id: UUID) -> QASet | None:
+        qaset_id = await self._connection.scalar(
+            select(question_variants.c.qaset_id).where(question_variants.c.id == variant_id)
+        )
+        return None if qaset_id is None else await self.get(qaset_id)
+
     async def storage_uri_in_use(self, storage_uri: str) -> bool:
         query = select(exists().where(audios.c.storage_uri == storage_uri))
         return bool(await self._connection.scalar(query))

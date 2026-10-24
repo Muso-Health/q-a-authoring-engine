@@ -44,6 +44,10 @@ from qa_authoring.application.user_errors import (
     RoleNotAssignedError,
     UserNotFoundError,
 )
+from qa_authoring.application.validation_errors import (
+    NoBaseLanguagePresenceError,
+    NotATranslationError,
+)
 from qa_authoring.domain.model.language import InvalidLanguageNameError
 from qa_authoring.domain.model.permission import UnknownPermissionError
 from qa_authoring.domain.model.qaset import (
@@ -61,6 +65,7 @@ from qa_authoring.domain.model.qaset import (
     TranslationLinkNotFoundError,
 )
 from qa_authoring.domain.model.user import InvalidEmailError
+from qa_authoring.domain.model.validation import InvalidDecisionError
 from qa_authoring.domain.value_objects.language_code import InvalidLanguageCodeError
 from qa_authoring.domain.value_objects.naming import InvalidNameError, InvalidTextError
 
@@ -86,6 +91,9 @@ _RULES: dict[type[Exception], _Rule] = {
     RoleInUseError: _Rule(409, "role_in_use"),
     EmailAlreadyExistsError: _Rule(409, "email_already_exists"),
     RoleNameExistsError: _Rule(409, "role_name_exists"),
+    NoBaseLanguagePresenceError: _Rule(409, "no_base_language_presence"),
+    NotATranslationError: _Rule(422, "not_a_translation"),
+    InvalidDecisionError: _Rule(422, "invalid_decision"),
     UnknownPermissionError: _Rule(422, "unknown_permission"),
     InvalidEmailError: _Rule(422, "invalid_email"),
     LanguageNotFoundError: _Rule(404, "language_not_found"),

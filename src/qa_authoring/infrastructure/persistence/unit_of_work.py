@@ -18,6 +18,9 @@ from qa_authoring.infrastructure.persistence.repositories.qaset import PostgresQ
 from qa_authoring.infrastructure.persistence.repositories.role import PostgresRoleRepository
 from qa_authoring.infrastructure.persistence.repositories.theme import PostgresThemeRepository
 from qa_authoring.infrastructure.persistence.repositories.user import PostgresUserRepository
+from qa_authoring.infrastructure.persistence.repositories.validation import (
+    PostgresValidationRepository,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -34,6 +37,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.application.ports.user_repository import UserRepository
+    from qa_authoring.application.ports.validation_repository import ValidationRepository
 
 _log = logging.getLogger(__name__)
 
@@ -51,6 +55,7 @@ class SqlAlchemyUnitOfWork:
     categories: CategoryRepository
     users: UserRepository
     roles: RoleRepository
+    validations: ValidationRepository
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -73,6 +78,7 @@ class SqlAlchemyUnitOfWork:
         self.categories = PostgresCategoryRepository(self._connection)
         self.users = PostgresUserRepository(self._connection)
         self.roles = PostgresRoleRepository(self._connection)
+        self.validations = PostgresValidationRepository(self._connection)
         return self
 
     async def __aexit__(
