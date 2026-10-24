@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
-from qa_authoring.domain.value_objects.naming import clean_text
+from qa_authoring.domain.value_objects.naming import clean_text, normalize_key
 
 
 def normalize_intent_text(text: str) -> str:
     """The uniqueness key: trimmed, inner whitespace collapsed, lowercased."""
-    return " ".join(text.split()).lower()
+    return normalize_key(text)
 
 
 class Intent:

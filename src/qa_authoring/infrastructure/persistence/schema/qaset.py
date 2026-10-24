@@ -120,3 +120,19 @@ variant_intents = Table(
     Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
     PrimaryKeyConstraint("variant_id", "intent_id"),
 )
+
+qaset_categories = Table(
+    "qaset_categories",
+    metadata,
+    Column("qaset_id", Uuid, ForeignKey("qasets.id", ondelete="CASCADE"), nullable=False),
+    Column(
+        "category_id",
+        Uuid,
+        ForeignKey("categories.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    ),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+    # Also the index on qaset_id.
+    PrimaryKeyConstraint("qaset_id", "category_id"),
+)

@@ -248,14 +248,16 @@ async def test_get_groups_by_language_with_variant_counts(store: InMemoryStore) 
     await _add_variant(store, qaset_id, fr, "Two")
     await _add_variant(store, qaset_id, bm, "Three")
 
-    result = await GetQASetHandler(store.qasets, store.intents)(GetQASetQuery(qaset_id))
+    result = await GetQASetHandler(store.qasets, store.intents, store.categories)(
+        GetQASetQuery(qaset_id)
+    )
 
     by_language = {p.language_id: p for p in result.languages}
     assert {lang: p.variant_count for lang, p in by_language.items()} == {fr: 2, bm: 1}
     assert {v.text for v in by_language[fr].variants} == {"One", "Two"}
     assert all(v.language_id == fr for v in by_language[fr].variants)
     with pytest.raises(QASetNotFoundError):
-        await GetQASetHandler(store.qasets, store.intents)(GetQASetQuery(uuid4()))
+        await GetQASetHandler(store.qasets, store.intents, store.categories)(GetQASetQuery(uuid4()))
 
 
 async def test_list_by_theme_returns_only_its_qasets(store: InMemoryStore) -> None:

@@ -35,4 +35,4 @@ class CreateQASetHandler:
             answer_text=command.answer_text,
         )
         await self._qasets.add(qaset)
-        return QASetResult.of(qaset, {})
+        return QASetResult.of(qaset, {}, {})

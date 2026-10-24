@@ -6,17 +6,20 @@ from typing import TYPE_CHECKING, Self
 
 from config.container import Container
 from qa_authoring.domain.model.intent import normalize_intent_text
+from qa_authoring.domain.value_objects.naming import normalize_key
 
 if TYPE_CHECKING:
     from types import TracebackType
     from uuid import UUID
 
+    from qa_authoring.application.ports.category_repository import CategoryRepository
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
+    from qa_authoring.domain.model.category import Category
     from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
@@ -154,6 +157,9 @@ class InMemoryQASetRepository:
     async def uses_intent(self, intent_id: UUID) -> bool:
         return any(row.uses_intent(intent_id) for row in self.rows.values())
 
+    async def uses_category(self, category_id: UUID) -> bool:
+        return any(row.uses_category(category_id) for row in self.rows.values())
+
 
 class InMemoryIntentRepository:
     def __init__(self) -> None:
@@ -181,6 +187,32 @@ class InMemoryIntentRepository:
         self.rows.pop(intent_id, None)
 
 
+class InMemoryCategoryRepository:
+    def __init__(self) -> None:
+        self.rows: dict[UUID, Category] = {}
+
+    async def get_or_create(self, category: Category) -> tuple[Category, bool]:
+        existing = next((row for row in self.rows.values() if row.key == category.key), None)
+        if existing is not None:
+            return existing, False
+        self.rows[category.id] = category
+        return category, True
+
+    async def get(self, category_id: UUID) -> Category | None:
+        return self.rows.get(category_id)
+
+    async def get_many(self, category_ids: set[UUID]) -> dict[UUID, Category]:
+        return {i: self.rows[i] for i in category_ids if i in self.rows}
+
+    async def list(self, prefix: str | None = None) -> tuple[Category, ...]:
+        key = normalize_key(prefix or "")
+        rows = [row for row in self.rows.values() if row.key.startswith(key)]
+        return tuple(sorted(rows, key=lambda row: (row.key, str(row.id))))
+
+    async def delete(self, category_id: UUID) -> None:
+        self.rows.pop(category_id, None)
+
+
 @dataclass
 class InMemoryStore:
     languages: InMemoryLanguageRepository = field(default_factory=InMemoryLanguageRepository)
@@ -189,6 +221,7 @@ class InMemoryStore:
     themes: InMemoryThemeRepository = field(default_factory=InMemoryThemeRepository)
     qasets: InMemoryQASetRepository = field(default_factory=InMemoryQASetRepository)
     intents: InMemoryIntentRepository = field(default_factory=InMemoryIntentRepository)
+    categories: InMemoryCategoryRepository = field(default_factory=InMemoryCategoryRepository)
 
 
 class InMemoryUnitOfWork:
@@ -198,6 +231,7 @@ class InMemoryUnitOfWork:
     themes: ThemeRepository
     qasets: QASetRepository
     intents: IntentRepository
+    categories: CategoryRepository
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -206,6 +240,7 @@ class InMemoryUnitOfWork:
         self.themes = store.themes
         self.qasets = store.qasets
         self.intents = store.intents
+        self.categories = store.categories
 
     async def __aenter__(self) -> Self:
         return self

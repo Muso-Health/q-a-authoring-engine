@@ -17,6 +17,7 @@ from qa_authoring.infrastructure.persistence.repositories._integrity import (
 from qa_authoring.infrastructure.persistence.schema.qaset import (
     answer_translation_links,
     answers,
+    qaset_categories,
     qasets,
     question_variants,
     variant_intents,
@@ -74,6 +75,7 @@ class PostgresQASetRepository:
         await self._insert(answers, qaset.id, qaset.answers)
         await self._insert(question_variants, qaset.id, qaset.variants)
         await self._save_intents(qaset)
+        await self._save_categories(qaset)
         await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
         await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
@@ -112,6 +114,7 @@ class PostgresQASetRepository:
         # Links and attachments last: they reference answers/variants inserted above. Those of
         # removed items are already gone (ON DELETE CASCADE).
         await self._save_intents(qaset)
+        await self._save_categories(qaset)
         await self._save_links(_ANSWER_LINKS, qaset.id, qaset.answer_links)
         await self._save_links(_VARIANT_LINKS, qaset.id, qaset.variant_links)
 
@@ -130,6 +133,32 @@ class PostgresQASetRepository:
     async def uses_intent(self, intent_id: UUID) -> bool:
         query = select(exists().where(variant_intents.c.intent_id == intent_id))
         return bool(await self._connection.scalar(query))
+
+    async def uses_category(self, category_id: UUID) -> bool:
+        query = select(exists().where(qaset_categories.c.category_id == category_id))
+        return bool(await self._connection.scalar(query))
+
+    async def _save_categories(self, qaset: QASet) -> None:
+        stored: set[UUID] = set(
+            await self._connection.scalars(
+                select(qaset_categories.c.category_id).where(
+                    qaset_categories.c.qaset_id == qaset.id
+                )
+            )
+        )
+        missing = stored - set(qaset.category_ids)
+        if missing:
+            await self._connection.execute(
+                delete(qaset_categories).where(
+                    qaset_categories.c.qaset_id == qaset.id,
+                    qaset_categories.c.category_id.in_(missing),
+                )
+            )
+        new = [
+            {"qaset_id": qaset.id, "category_id": c} for c in qaset.category_ids if c not in stored
+        ]
+        if new:
+            await self._connection.execute(insert(qaset_categories), new)
 
     async def _save_intents(self, qaset: QASet) -> None:
         stored = {
@@ -254,6 +283,13 @@ class PostgresQASetRepository:
             variants_by_qaset[v.qaset_id].append(
                 QuestionVariant(v.id, v.language_id, v.text, intents_by_variant[v.id])
             )
+        categories_by_qaset: defaultdict[UUID, list[UUID]] = defaultdict(list)
+        for row in await self._connection.execute(
+            select(qaset_categories.c.qaset_id, qaset_categories.c.category_id)
+            .where(qaset_categories.c.qaset_id.in_(ids))
+            .order_by(qaset_categories.c.created_at, qaset_categories.c.category_id)
+        ):
+            categories_by_qaset[row.qaset_id].append(row.category_id)
         answer_links = await self._load_links(_ANSWER_LINKS, ids)
         variant_links = await self._load_links(_VARIANT_LINKS, ids)
         return tuple(
@@ -264,6 +300,7 @@ class PostgresQASetRepository:
                 variants=variants_by_qaset[row.id],
                 answer_links=answer_links[row.id],
                 variant_links=variant_links[row.id],
+                category_ids=categories_by_qaset[row.id],
             )
             for row in rows
         )

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Protocol, Self
 if TYPE_CHECKING:
     from types import TracebackType
 
+    from qa_authoring.application.ports.category_repository import CategoryRepository
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
@@ -23,6 +24,7 @@ class UnitOfWork(Protocol):
     themes: ThemeRepository
     qasets: QASetRepository
     intents: IntentRepository
+    categories: CategoryRepository
 
     async def __aenter__(self) -> Self: ...
 

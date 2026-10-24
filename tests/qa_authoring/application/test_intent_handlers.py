@@ -173,7 +173,9 @@ async def test_get_qaset_shows_intents_in_attachment_order(store: InMemoryStore)
     await _attach(store, qaset.id, variant_id, first)
     await _attach(store, qaset.id, variant_id, second)
 
-    result = await GetQASetHandler(store.qasets, store.intents)(GetQASetQuery(qaset.id))
+    result = await GetQASetHandler(store.qasets, store.intents, store.categories)(
+        GetQASetQuery(qaset.id)
+    )
 
     [variant] = result.languages[0].variants
     assert [(i.intent_id, i.text) for i in variant.intents] == [

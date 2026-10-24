@@ -38,6 +38,12 @@ class TranslationLinkResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AttachedCategoryResult:
+    category_id: UUID
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class AttachedIntentResult:
     intent_id: UUID
     text: str
@@ -94,13 +100,21 @@ class QASetResult:
     id: UUID
     theme_id: UUID
     languages: tuple[LanguagePresenceResult, ...]
+    categories: tuple[AttachedCategoryResult, ...]
 
     @classmethod
-    def of(cls, qaset: QASet, intent_texts: Mapping[UUID, str]) -> QASetResult:
+    def of(
+        cls,
+        qaset: QASet,
+        intent_texts: Mapping[UUID, str],
+        category_names: Mapping[UUID, str],
+    ) -> QASetResult:
+        """The two mappings resolve attached catalogue ids to their intent text / category name."""
         return cls(
             qaset.id,
             qaset.theme_id,
             tuple(LanguagePresenceResult.of(qaset, p, intent_texts) for p in qaset.presences()),
+            tuple(AttachedCategoryResult(c, category_names[c]) for c in qaset.category_ids),
         )
 
 

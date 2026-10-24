@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Response, status
 
 from apps.api.dependencies import get_container
 from apps.api.schemas.qasets import (
+    AddCategoryRequest,
     AnswerInLanguageRequest,
     AnswerLinkResponse,
     AttachIntentRequest,
@@ -20,6 +21,7 @@ from apps.api.schemas.qasets import (
     VariantLinkResponse,
 )
 from config.container import Container
+from qa_authoring.application.add_category.command import AddCategoryCommand
 from qa_authoring.application.add_language_presence.command import AddLanguagePresenceCommand
 from qa_authoring.application.add_question_variant.command import AddQuestionVariantCommand
 from qa_authoring.application.attach_intent.command import AttachIntentCommand
@@ -33,6 +35,7 @@ from qa_authoring.application.get_qaset.command import GetQASetQuery
 from qa_authoring.application.link_answers.command import LinkAnswersCommand
 from qa_authoring.application.link_variants.command import LinkVariantsCommand
 from qa_authoring.application.list_qasets.command import ListQASetsQuery
+from qa_authoring.application.remove_category.command import RemoveCategoryCommand
 from qa_authoring.application.remove_language_presence.command import (
     RemoveLanguagePresenceCommand,
 )
@@ -209,4 +212,27 @@ async def detach_intent(
     """404 ``intent_not_attached`` if the variant does not carry the intent."""
     command = DetachIntentCommand(qaset_id=qaset_id, variant_id=variant_id, intent_id=intent_id)
     await container.run(container.build_detach_intent, command)
+    return _no_content()
+
+
+@router.post("/qasets/{qaset_id}/categories", status_code=status.HTTP_201_CREATED)
+async def add_category(
+    qaset_id: UUID, body: AddCategoryRequest, response: Response, container: ContainerDep
+) -> QASetResponse:
+    """Attach a catalogue category to the whole QA set. Idempotent: 201 when attached, 200 when
+    it already was. Returns the QA set."""
+    command = AddCategoryCommand(qaset_id=qaset_id, category_id=body.category_id)
+    result, created = await container.run(container.build_add_category, command)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return QASetResponse.of(result)
+
+
+@router.delete(
+    "/qasets/{qaset_id}/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_category(qaset_id: UUID, category_id: UUID, container: ContainerDep) -> Response:
+    """404 ``category_not_attached`` if the QA set does not carry the category."""
+    command = RemoveCategoryCommand(qaset_id=qaset_id, category_id=category_id)
+    await container.run(container.build_remove_category, command)
     return _no_content()

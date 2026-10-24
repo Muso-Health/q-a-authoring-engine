@@ -75,6 +75,13 @@ class IntentNotAttachedError(Exception):
         self.intent_id = intent_id
 
 
+class CategoryNotAttachedError(Exception):
+    def __init__(self, qaset_id: UUID, category_id: UUID) -> None:
+        super().__init__(f"category {category_id} is not attached to QA set {qaset_id}")
+        self.qaset_id = qaset_id
+        self.category_id = category_id
+
+
 class _Text:
     __slots__ = ("_id", "_language_id", "_text")
     subject = "text"
@@ -224,10 +231,19 @@ class QASet:
     Invariants: at most one answer per language, and every question variant's language has an
     answer. Removing a language's answer removes its variants. Translation links pair two answers
     or two variants of this QA set in different languages; removing an item removes its links.
-    Answers, variants and links keep their creation order: rehydrate them in that order.
+    Categories (catalogue ids) apply to the whole QA set, across languages. Answers, variants,
+    links and categories keep their creation order: rehydrate them in that order.
     """
 
-    __slots__ = ("_answer_links", "_answers", "_id", "_theme_id", "_variant_links", "_variants")
+    __slots__ = (
+        "_answer_links",
+        "_answers",
+        "_category_ids",
+        "_id",
+        "_theme_id",
+        "_variant_links",
+        "_variants",
+    )
 
     def __init__(
         self,
@@ -238,9 +254,11 @@ class QASet:
         variants: Iterable[QuestionVariant],
         answer_links: Iterable[TranslationLink] = (),
         variant_links: Iterable[TranslationLink] = (),
+        category_ids: Iterable[UUID] = (),
     ) -> None:
         self._id = qaset_id
         self._theme_id = theme_id
+        self._category_ids: dict[UUID, None] = dict.fromkeys(category_ids)
         self._answers: dict[UUID, Answer] = {}
         self._variants: dict[UUID, QuestionVariant] = {}
         self._answer_links = _LinkSet()
@@ -277,6 +295,10 @@ class QASet:
     @property
     def variants(self) -> tuple[QuestionVariant, ...]:
         return tuple(self._variants.values())
+
+    @property
+    def category_ids(self) -> tuple[UUID, ...]:
+        return tuple(self._category_ids)
 
     @property
     def answer_links(self) -> tuple[TranslationLink, ...]:
@@ -353,6 +375,21 @@ class QASet:
 
     def uses_intent(self, intent_id: UUID) -> bool:
         return any(intent_id in v.intent_ids for v in self._variants.values())
+
+    def add_category(self, category_id: UUID) -> bool:
+        """Attach a catalogue category to the whole QA set; False if it already was."""
+        if category_id in self._category_ids:
+            return False
+        self._category_ids[category_id] = None
+        return True
+
+    def remove_category(self, category_id: UUID) -> None:
+        if category_id not in self._category_ids:
+            raise CategoryNotAttachedError(self._id, category_id)
+        del self._category_ids[category_id]
+
+    def uses_category(self, category_id: UUID) -> bool:
+        return category_id in self._category_ids
 
     def answer_translations(self, answer_id: UUID) -> tuple[Translation, ...]:
         return tuple(

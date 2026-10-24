@@ -28,3 +28,8 @@ def clean_text(text: str, *, subject: str) -> str:
     if not cleaned:
         raise InvalidTextError(f"{subject} text must not be blank")
     return cleaned
+
+
+def normalize_key(text: str) -> str:
+    """A catalogue uniqueness key: trimmed, inner whitespace collapsed, lowercased."""
+    return " ".join(text.split()).lower()
