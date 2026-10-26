@@ -5,7 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves query parameter annota
 
 from fastapi import APIRouter, Depends
 
-from apps.api.auth import requires
+from apps.api.auth import CurrentUser, requires
 from apps.api.dependencies import get_container
 from apps.api.schemas.validation_queues import (
     AudioQueueResponse,
@@ -22,6 +22,7 @@ ContainerDep = Annotated[Container, Depends(get_container)]
 
 
 def _query(
+    user: CurrentUser,
     project_id: UUID | None = None,
     theme_id: UUID | None = None,
     state: str = "pending",
@@ -29,8 +30,9 @@ def _query(
     cursor: str | None = None,
 ) -> ValidationQueueQuery:
     """``state``: pending (default; includes never decided), rejected, validated or all.
-    Items are ordered by id; pass the previous page's ``next_cursor`` to continue."""
-    return ValidationQueueQuery(project_id, theme_id, state, limit, cursor)
+    Items are ordered by id; pass the previous page's ``next_cursor`` to continue. Only what
+    the caller's grants for the queue's permission cover is listed."""
+    return ValidationQueueQuery(project_id, theme_id, state, limit, cursor, user.authorization)
 
 
 QueryDep = Annotated[ValidationQueueQuery, Depends(_query)]

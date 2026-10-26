@@ -10,7 +10,9 @@ import pytest
 
 from config.container import Container
 from qa_authoring.application.list_validation_queues.command import ValidationQueueQuery
+from qa_authoring.domain.model.authorization import Authorization, Grant
 from qa_authoring.domain.model.language import Language
+from qa_authoring.domain.model.permission import Permission
 from qa_authoring.domain.model.project import Project
 from qa_authoring.domain.model.protocol import Protocol
 from qa_authoring.domain.model.qaset import AudioReference, QASet
@@ -29,6 +31,16 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 VALIDATED, REJECTED = ValidationState.VALIDATED, ValidationState.REJECTED
+QUEUE_PERMISSIONS = (
+    Permission.VALIDATE_CLINICAL,
+    Permission.VALIDATE_TRANSLATION,
+    Permission.VALIDATE_AUDIO,
+)
+EVERYWHERE = Authorization([Grant(p) for p in QUEUE_PERMISSIONS], None)
+
+
+def _granted(*grants: Grant) -> Authorization:
+    return Authorization(grants, frozenset())
 
 
 def _audio(name: str) -> AudioReference:
@@ -46,7 +58,8 @@ def _audio(name: str) -> AudioReference:
 @dataclass
 class World:
     """Project P1 (base fr): theme T1 holds q1 (validated) and q2 (rejected), theme T2 holds q3
-    (Bambara only) and q5 (reset to pending). Project P2 holds q4 (never decided)."""
+    (Bambara only) and q5 (reset to pending). Project P2 holds q4 (never decided, with a Bambara
+    answer b4)."""
 
     container: Container
     p1: Project
@@ -60,9 +73,17 @@ class World:
     q5: QASet
     ids: dict[str, UUID]
     fr: UUID
+    bm: UUID
 
-    async def run(self, build: Callable[[Any], Any], **query: Any) -> Any:
-        return await self.container.run(build, ValidationQueueQuery(**query))
+    async def run(
+        self,
+        build: Callable[[Any], Any],
+        authorization: Authorization = EVERYWHERE,
+        **query: Any,
+    ) -> Any:
+        return await self.container.run(
+            build, ValidationQueueQuery(**query, authorization=authorization)
+        )
 
 
 @pytest.fixture
@@ -97,6 +118,7 @@ async def world(migrated_engine: AsyncEngine) -> World:
 
     q3 = QASet.create(theme_id=t2.id, language_id=bm.id, answer_text="B3")
     q4 = QASet.create(theme_id=t3.id, language_id=fr.id, answer_text="A4")
+    b4 = q4.add_language(bm.id, "B4")
     q5 = QASet.create(theme_id=t2.id, language_id=fr.id, answer_text="A5")
 
     def start(subject: ValidationSubject, state: ValidationState) -> Validation:
@@ -142,11 +164,12 @@ async def world(migrated_engine: AsyncEngine) -> World:
         "bv1b": bv1b.id,
         "b2": b2.id,
         "b3": q3.answers[0].id,
+        "b4": b4.id,
         "q1_audio": q1_audio.id,
         "bv1_audio": bv1_audio.id,
         "b2_audio": b2_audio.id,
     }
-    return World(container, p1, p2, t1, t2, q1, q2, q3, q4, q5, ids, fr.id)
+    return World(container, p1, p2, t1, t2, q1, q2, q3, q4, q5, ids, fr.id, bm.id)
 
 
 @pytest.mark.parametrize(
@@ -194,10 +217,10 @@ async def test_clinical_queue_scoping(world: World) -> None:
 @pytest.mark.parametrize(
     ("state", "expected"),
     [
-        ("pending", {"b1", "bv1b", "b3"}),
+        ("pending", {"b1", "bv1b", "b3", "b4"}),
         ("rejected", {"b2"}),
         ("validated", {"bv1"}),
-        ("all", {"b1", "bv1", "bv1b", "b2", "b3"}),
+        ("all", {"b1", "bv1", "bv1b", "b2", "b3", "b4"}),
     ],
 )
 async def test_translation_queue_excludes_the_base_language(
@@ -286,3 +309,82 @@ async def test_keyset_pagination(world: World, build: str) -> None:
         getattr(i, "audio_id", None) or getattr(i, "item_id", None) or i.qaset_id for i in collected
     ]
     assert keys == sorted(keys)
+
+
+# ── scoped by the user's grants ──────────────────────────────────────────────────────────────────
+
+
+async def test_a_project_scoped_clinical_validator_sees_only_its_project(world: World) -> None:
+    p1 = _granted(Grant(Permission.VALIDATE_CLINICAL, world.p1.id))
+    p2 = _granted(Grant(Permission.VALIDATE_CLINICAL, world.p2.id))
+    build = world.container.build_list_clinical_queue
+    pending_p1 = await world.run(build, p1)
+    pending_p2 = await world.run(build, p2)
+    everything = await world.run(build, p1, state="all")
+    assert [i.qaset_id for i in pending_p1.items] == [world.q5.id]
+    assert [i.qaset_id for i in pending_p2.items] == [world.q4.id]
+    assert {i.qaset_id for i in everything.items} == {world.q1.id, world.q2.id, world.q5.id}
+    assert (pending_p1.total, everything.total) == (1, 3)
+
+
+async def test_a_translation_validator_sees_its_project_and_language_only(world: World) -> None:
+    build = world.container.build_list_translation_queue
+
+    async def items(*grants: Grant) -> set[UUID]:
+        page = await world.run(build, _granted(*grants), state="all")
+        assert page.total == len(page.items)
+        return {item.item_id for item in page.items}
+
+    p1_items = {world.ids[i] for i in ("b1", "bv1", "bv1b", "b2", "b3")}
+    t = Permission.VALIDATE_TRANSLATION
+    assert await items(Grant(t, world.p1.id, world.bm)) == p1_items
+    assert await items(Grant(t, world.p1.id, world.fr)) == set()
+    assert await items(Grant(t, None, world.bm)) == {*p1_items, world.ids["b4"]}
+    assert await items(Grant(t, world.p2.id)) == {world.ids["b4"]}
+    assert await items(Grant(t, world.p2.id), Grant(t, world.p1.id, world.bm)) == {
+        *p1_items,
+        world.ids["b4"],
+    }
+
+
+async def test_an_audio_validator_is_scoped_by_the_recorded_item_language(world: World) -> None:
+    build = world.container.build_list_audio_queue
+    a = Permission.VALIDATE_AUDIO
+    fr_only = await world.run(build, _granted(Grant(a, world.p1.id, world.fr)), state="all")
+    bm_only = await world.run(build, _granted(Grant(a, None, world.bm)), state="all")
+    assert [i.audio_id for i in fr_only.items] == [world.ids["q1_audio"]]
+    assert {i.audio_id for i in bm_only.items} == {world.ids["bv1_audio"], world.ids["b2_audio"]}
+    assert (fr_only.total, bm_only.total) == (1, 2)
+
+
+@pytest.mark.parametrize(
+    "build", ["build_list_clinical_queue", "build_list_translation_queue", "build_list_audio_queue"]
+)
+async def test_no_covering_grant_means_an_empty_queue(world: World, build: str) -> None:
+    elsewhere = _granted(
+        *(Grant(p, uuid4(), world.bm) for p in QUEUE_PERMISSIONS), Grant(Permission.MANAGE_ACCESS)
+    )
+    page = await world.run(getattr(world.container, build), elsewhere, state="all")
+    assert (page.items, page.next_cursor, page.total) == ((), None, 0)
+
+
+async def test_filters_and_pagination_compose_with_the_scope(world: World) -> None:
+    p1 = _granted(Grant(Permission.VALIDATE_CLINICAL, world.p1.id))
+    build = world.container.build_list_clinical_queue
+    by_theme = await world.run(build, p1, theme_id=world.t2.id, state="all")
+    rejected = await world.run(build, p1, state="rejected")
+    other_project = await world.run(build, p1, project_id=world.p2.id, state="all")
+    assert [i.qaset_id for i in by_theme.items] == [world.q5.id]
+    assert [i.qaset_id for i in rejected.items] == [world.q2.id]
+    assert (other_project.items, other_project.total) == ((), 0)
+
+    collected: list[UUID] = []
+    cursor: str | None = None
+    while True:
+        page = await world.run(build, p1, state="all", limit=1, cursor=cursor)
+        assert page.total == 3
+        collected.extend(item.qaset_id for item in page.items)
+        if page.next_cursor is None:
+            break
+        cursor = str(page.next_cursor)
+    assert collected == sorted([world.q1.id, world.q2.id, world.q5.id])

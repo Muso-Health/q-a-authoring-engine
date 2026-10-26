@@ -13,6 +13,7 @@ from qa_authoring.application.validation_queues import (
     QueueContext,
     QueueFilter,
     QueuePage,
+    QueueScope,
     QueueState,
     SourceText,
     TranslationQueueItem,
@@ -31,6 +32,7 @@ CONTEXT = QueueContext(
     NamedRef(uuid4(), "Muso"), NamedRef(uuid4(), "Malaria"), NamedRef(uuid4(), "Fever")
 )
 QASET, ITEM, SOURCE, AUDIO, NEXT = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+EVERYWHERE = QueueScope(frozenset({(None, None)}))
 
 
 def _context() -> dict[str, Any]:
@@ -95,7 +97,7 @@ def test_clinical_queue_shape_and_default_filter(setup: tuple[TestClient, InMemo
         "next_cursor": str(NEXT),
         "total": 3,
     }
-    assert store.validation_queues.calls == [("clinical", QueueFilter())]
+    assert store.validation_queues.calls == [("clinical", QueueFilter(scope=EVERYWHERE))]
 
 
 def test_translation_queue_shape(setup: tuple[TestClient, InMemoryStore]) -> None:
@@ -146,7 +148,10 @@ def test_filters_are_passed_through_and_the_limit_capped(
     }
     _ok(client.get("/validation-queues/audio", params=params))
     assert store.validation_queues.calls == [
-        ("audio", QueueFilter(project, theme, QueueState.ALL, MAX_QUEUE_LIMIT, cursor))
+        (
+            "audio",
+            QueueFilter(project, theme, QueueState.ALL, MAX_QUEUE_LIMIT, cursor, EVERYWHERE),
+        )
     ]
 
 
@@ -188,3 +193,37 @@ def test_each_queue_needs_its_permission(
 
     assert (denied.status_code, denied.json()["code"]) == (403, "permission_denied")
     assert allowed.status_code == 200, allowed.text
+
+
+@pytest.mark.parametrize(
+    ("queue", "permission"),
+    [
+        ("clinical", Permission.VALIDATE_CLINICAL),
+        ("translation", Permission.VALIDATE_TRANSLATION),
+        ("audio", Permission.VALIDATE_AUDIO),
+    ],
+)
+def test_each_queue_is_scoped_by_the_caller_grants(
+    setup: tuple[TestClient, InMemoryStore], queue: str, permission: Permission
+) -> None:
+    client, store = setup
+    project, language = uuid4(), uuid4()
+    seed_user(store, "scoped@example.org", permission, project_id=project, language_id=language)
+    seed_user(
+        store,
+        "other@example.org",
+        *[p for p in Permission if p is not permission],
+        project_id=project,
+    )
+
+    response = client.get(
+        f"/validation-queues/{queue}", headers={"X-Dev-User": "scoped@example.org"}
+    )
+    assert response.status_code == 200, response.text
+    # A project permission ignores the language of its assignment.
+    expected_language = None if permission is Permission.VALIDATE_CLINICAL else language
+    [(called, queue_filter)] = store.validation_queues.calls
+    assert called == queue
+    assert queue_filter.scope == QueueScope(frozenset({(project, expected_language)}))
+    denied = client.get(f"/validation-queues/{queue}", headers={"X-Dev-User": "other@example.org"})
+    assert (denied.status_code, denied.json()["code"]) == (403, "permission_denied")

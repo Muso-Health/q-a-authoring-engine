@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Text, and_, case, func, literal, select, tuple_, union_all
+from sqlalchemy import Text, and_, case, false, func, literal, or_, select, true, tuple_, union_all
 
 from qa_authoring.application.validation_queues import (
     AudioQueueItem,
@@ -72,8 +72,31 @@ def _state(current_state: ColumnElement[Any]) -> ColumnElement[str]:
     return func.coalesce(current_state, _PENDING)
 
 
-def _conditions(queue_filter: QueueFilter, state: ColumnElement[str]) -> list[ColumnElement[bool]]:
-    conditions: list[ColumnElement[bool]] = []
+def _within_scope(
+    queue_filter: QueueFilter, language_id: ColumnElement[Any] | None
+) -> list[ColumnElement[bool]]:
+    """An OR over the caller's (project, language) scopes, None in either matching any."""
+    scope = queue_filter.scope
+    if scope.unrestricted:
+        return []
+    alternatives = []
+    for project_id, scoped_language in scope.scopes:
+        parts: list[ColumnElement[bool]] = []
+        if project_id is not None:
+            parts.append(projects.c.id == project_id)
+        if scoped_language is not None and language_id is not None:
+            parts.append(language_id == scoped_language)
+        alternatives.append(and_(true(), *parts))
+    return [or_(false(), *alternatives)]
+
+
+def _conditions(
+    queue_filter: QueueFilter,
+    state: ColumnElement[str],
+    language_id: ColumnElement[Any] | None = None,
+) -> list[ColumnElement[bool]]:
+    """``language_id`` is the item's language, for queues scoped by language."""
+    conditions = _within_scope(queue_filter, language_id)
     if queue_filter.project_id is not None:
         conditions.append(projects.c.id == queue_filter.project_id)
     if queue_filter.theme_id is not None:
@@ -147,7 +170,7 @@ class PostgresValidationQueues:
         state = _state(items.c.current_state)
         conditions = [
             items.c.language_id != projects.c.base_language_id,
-            *_conditions(queue_filter, state),
+            *_conditions(queue_filter, state, items.c.language_id),
         ]
         rows, next_cursor, total = await self._page(
             select(
@@ -197,6 +220,7 @@ class PostgresValidationQueues:
 
     async def audio(self, queue_filter: QueueFilter) -> QueuePage[AudioQueueItem]:
         qv = question_variants
+        language_id = func.coalesce(answers.c.language_id, qv.c.language_id)
         source = (
             _within_context(
                 audios.outerjoin(answers, answers.c.id == audios.c.answer_id).outerjoin(
@@ -204,9 +228,7 @@ class PostgresValidationQueues:
                 ),
                 func.coalesce(answers.c.qaset_id, qv.c.qaset_id),
             )
-            .join(
-                languages, languages.c.id == func.coalesce(answers.c.language_id, qv.c.language_id)
-            )
+            .join(languages, languages.c.id == language_id)
             .outerjoin(validations, validations.c.audio_id == audios.c.id)
         )
         state = _state(validations.c.current_state)
@@ -222,7 +244,7 @@ class PostgresValidationQueues:
                 state.label("state"),
             ).select_from(source),
             audios.c.id,
-            _conditions(queue_filter, state),
+            _conditions(queue_filter, state, language_id),
             queue_filter,
         )
         return QueuePage(
