@@ -7,4 +7,4 @@ from uuid import UUID  # noqa: TC003 — a field type on a frozen dataclass
 @dataclass(frozen=True, slots=True)
 class UnassignRoleCommand:
     user_id: UUID
-    role_id: UUID
+    assignment_id: UUID

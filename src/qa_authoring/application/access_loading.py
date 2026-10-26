@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qa_authoring.application.access_response import UserResult
+from qa_authoring.application.access_response import AccessReferences, UserResult
 from qa_authoring.application.role_errors import RoleNotFoundError
 from qa_authoring.application.user_errors import UserNotFoundError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
+    from qa_authoring.application.ports.language_repository import LanguageRepository
+    from qa_authoring.application.ports.project_repository import ProjectRepository
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.user_repository import UserRepository
     from qa_authoring.domain.model.role import Role
@@ -29,5 +32,28 @@ async def load_role(roles: RoleRepository, role_id: UUID) -> Role:
     return role
 
 
-async def user_result(roles: RoleRepository, user: User) -> UserResult:
-    return UserResult.of(user, await roles.get_many(set(user.role_ids)))
+class UserViews:
+    """User results with the roles, projects and languages of their assignments resolved."""
+
+    def __init__(
+        self, roles: RoleRepository, projects: ProjectRepository, languages: LanguageRepository
+    ) -> None:
+        self._roles = roles
+        self._projects = projects
+        self._languages = languages
+
+    async def one(self, user: User) -> UserResult:
+        return (await self.many((user,)))[0]
+
+    async def many(self, users: Sequence[User]) -> tuple[UserResult, ...]:
+        assignments = [a for user in users for a in user.assignments]
+        project_ids = {a.project_id for a in assignments if a.project_id is not None}
+        language_ids = {a.language_id for a in assignments if a.language_id is not None}
+        projects = {i: p for i in project_ids if (p := await self._projects.get(i)) is not None}
+        languages = {
+            i: lang for i in language_ids if (lang := await self._languages.get(i)) is not None
+        }
+        references = AccessReferences(
+            await self._roles.get_many({a.role_id for a in assignments}), projects, languages
+        )
+        return tuple(UserResult.of(user, references) for user in users)

@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Self
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 
@@ -15,6 +16,7 @@ from qa_authoring.application.documentation_policy import DocumentationPolicy
 from qa_authoring.application.ports.audio_probe import ProbedAudio, UnreadableAudioError
 from qa_authoring.application.ports.corpus_export import CorpusArtifacts
 from qa_authoring.application.ports.llm import LlmUnavailableError
+from qa_authoring.application.ports.resource_scopes import ResourceKind, ResourceScope
 from qa_authoring.application.ports.translator import (
     TranslationEngineError,
     UnsupportedLanguageForEngineError,
@@ -35,7 +37,6 @@ from qa_authoring.infrastructure.auth.dev import DevIdentityProvider
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     from types import TracebackType
-    from uuid import UUID
 
     from qa_authoring.application.corpus_datasets import CorpusDatasets
     from qa_authoring.application.ports.category_repository import CategoryRepository
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
     )
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
+    from qa_authoring.application.ports.resource_scopes import ResourceScopes
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.application.ports.user_repository import UserRepository
@@ -353,6 +355,47 @@ class InMemoryUserRepository:
         return any(role_id in u.role_ids for u in self.rows.values())
 
 
+class InMemoryResourceScopes:
+    """Walks the store up to each resource's project, like the SQL resolver."""
+
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def _of_theme(self, theme_id: UUID) -> ResourceScope | None:
+        theme = self._store.themes.rows.get(theme_id)
+        protocol = None if theme is None else self._store.protocols.rows.get(theme.protocol_id)
+        return None if protocol is None else ResourceScope(protocol.project_id)
+
+    async def resolve(self, kind: ResourceKind, resource_id: UUID) -> ResourceScope | None:
+        store = self._store
+        if kind is ResourceKind.PROJECT:
+            return ResourceScope(resource_id) if resource_id in store.projects.rows else None
+        if kind is ResourceKind.PROTOCOL:
+            protocol = store.protocols.rows.get(resource_id)
+            return None if protocol is None else ResourceScope(protocol.project_id)
+        if kind is ResourceKind.THEME:
+            return self._of_theme(resource_id)
+        if kind is ResourceKind.DOCUMENTATION:
+            document = store.documentation.rows.get(resource_id)
+            return None if document is None else self._of_theme(document.theme_id)
+        for qaset in store.qasets.rows.values():
+            if kind is ResourceKind.QASET and qaset.id == resource_id:
+                return self._of_theme(qaset.theme_id)
+            items = {
+                ResourceKind.ANSWER: qaset.answers,
+                ResourceKind.VARIANT: qaset.variants,
+                ResourceKind.AUDIO: (*qaset.answers, *qaset.variants),
+            }.get(kind, ())
+            for item in items:
+                key = item.id if kind is not ResourceKind.AUDIO else getattr(item.audio, "id", None)
+                if key == resource_id:
+                    scope = self._of_theme(qaset.theme_id)
+                    return (
+                        None if scope is None else ResourceScope(scope.project_id, item.language_id)
+                    )
+        return None
+
+
 class InMemoryValidationRepository:
     def __init__(self) -> None:
         self.rows: dict[ValidationSubject, Validation] = {}
@@ -595,12 +638,14 @@ class InMemoryStore:
         default_factory=lambda: InMemoryBlobStorage("exports")
     )
     validation_queues: FakeValidationQueues = field(default_factory=FakeValidationQueues)
+    resource_scopes: InMemoryResourceScopes = field(init=False)
     llm: FakeLlm = field(default_factory=FakeLlm)
     google_translator: FakeGoogleTranslator = field(default_factory=FakeGoogleTranslator)
     events: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.roles.users = self.users
+        self.resource_scopes = InMemoryResourceScopes(self)
         # One timeline across storage, repository and commits, to assert their ordering.
         self.qasets.events = self.events
         self.audio_storage.events = self.events
@@ -622,6 +667,7 @@ class InMemoryUnitOfWork:
     prompt_templates: PromptTemplateRepository
     documentation: DocumentationRepository
     validation_queues: ValidationQueuesPort
+    resource_scopes: ResourceScopes
 
     def __init__(self, store: InMemoryStore) -> None:
         self.languages = store.languages
@@ -637,6 +683,7 @@ class InMemoryUnitOfWork:
         self.prompt_templates = store.prompt_templates
         self.documentation = store.documentation
         self.validation_queues = store.validation_queues
+        self.resource_scopes = store.resource_scopes
         self._events = store.events
         self._after_commit: list[Callable[[], Awaitable[None]]] = []
 
@@ -681,15 +728,26 @@ def in_memory_container() -> tuple[Container, InMemoryStore]:
 ADMIN_EMAIL = "admin@example.org"
 
 
-def seed_user(store: InMemoryStore, email: str, *permissions: Permission) -> User:
-    """An active user holding ``permissions`` through a role of their own."""
+def seed_user(
+    store: InMemoryStore,
+    email: str,
+    *permissions: Permission,
+    project_id: UUID | str | None = None,
+    language_id: UUID | str | None = None,
+) -> User:
+    """An active user holding ``permissions`` through a role of their own, within the given
+    scope (global by default). A scope with no permissions still makes its project visible."""
     user = User.create(email=email, display_name=email.split("@")[0])
-    if permissions:
+    if permissions or project_id is not None or language_id is not None:
         role = Role.create(name=f"role for {email}", permissions=permissions)
         store.roles.rows[role.id] = role
-        user.assign_role(role.id)
+        user.assign(role.id, project_id=_uuid(project_id), language_id=_uuid(language_id))
     store.users.rows[user.id] = user
     return user
+
+
+def _uuid(value: UUID | str | None) -> UUID | None:
+    return None if value is None else UUID(str(value))
 
 
 def admin_client(container: Container, store: InMemoryStore) -> TestClient:

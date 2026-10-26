@@ -10,10 +10,15 @@ if TYPE_CHECKING:
 
 
 class ListProjectsHandler:
-    """Every project, ordered by name."""
+    """Every project (or those the query restricts to), ordered by name."""
 
     def __init__(self, projects: ProjectRepository) -> None:
         self._projects = projects
 
     async def __call__(self, query: ListProjectsQuery) -> tuple[ProjectResult, ...]:
-        return tuple(ProjectResult.of(project) for project in await self._projects.list())
+        wanted = query.project_ids
+        return tuple(
+            ProjectResult.of(project)
+            for project in await self._projects.list()
+            if wanted is None or project.id in wanted
+        )

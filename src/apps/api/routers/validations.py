@@ -14,6 +14,7 @@ from qa_authoring.application.get_clinical_validation.command import GetClinical
 from qa_authoring.application.get_translation_validation.command import (
     GetTranslationValidationQuery,
 )
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.application.record_audio_decision.command import RecordAudioDecisionCommand
 from qa_authoring.application.record_clinical_decision.command import (
     RecordClinicalDecisionCommand,
@@ -26,9 +27,10 @@ from qa_authoring.domain.model.permission import Permission
 router = APIRouter(tags=["validation"])
 
 ContainerDep = Annotated[Container, Depends(get_container)]
-CLINICAL = [requires(Permission.VALIDATE_CLINICAL)]
-TRANSLATION = [requires(Permission.VALIDATE_TRANSLATION)]
-AUDIO = [requires(Permission.VALIDATE_AUDIO)]
+CLINICAL = [requires(Permission.VALIDATE_CLINICAL, on=ResourceKind.QASET)]
+ANSWER_TRANSLATION = [requires(Permission.VALIDATE_TRANSLATION, on=ResourceKind.ANSWER)]
+VARIANT_TRANSLATION = [requires(Permission.VALIDATE_TRANSLATION, on=ResourceKind.VARIANT)]
+AUDIO = [requires(Permission.VALIDATE_AUDIO, on=ResourceKind.AUDIO)]
 
 
 def _respond(response: Response, created: bool) -> None:
@@ -79,7 +81,7 @@ async def _record_translation(
 @router.post(
     "/answers/{answer_id}/translation-validation",
     status_code=status.HTTP_201_CREATED,
-    dependencies=TRANSLATION,
+    dependencies=ANSWER_TRANSLATION,
 )
 async def record_answer_translation_decision(
     answer_id: UUID,
@@ -95,7 +97,7 @@ async def record_answer_translation_decision(
     return await _record_translation(container, response, command)
 
 
-@router.get("/answers/{answer_id}/translation-validation", dependencies=TRANSLATION)
+@router.get("/answers/{answer_id}/translation-validation", dependencies=ANSWER_TRANSLATION)
 async def get_answer_translation_validation(
     answer_id: UUID, container: ContainerDep
 ) -> ValidationResponse:
@@ -108,7 +110,7 @@ async def get_answer_translation_validation(
 @router.post(
     "/variants/{variant_id}/translation-validation",
     status_code=status.HTTP_201_CREATED,
-    dependencies=TRANSLATION,
+    dependencies=VARIANT_TRANSLATION,
 )
 async def record_variant_translation_decision(
     variant_id: UUID,
@@ -124,7 +126,7 @@ async def record_variant_translation_decision(
     return await _record_translation(container, response, command)
 
 
-@router.get("/variants/{variant_id}/translation-validation", dependencies=TRANSLATION)
+@router.get("/variants/{variant_id}/translation-validation", dependencies=VARIANT_TRANSLATION)
 async def get_variant_translation_validation(
     variant_id: UUID, container: ContainerDep
 ) -> ValidationResponse:

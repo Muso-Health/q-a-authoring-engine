@@ -14,7 +14,11 @@ pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "qa_authoring_it"
 # An audio's created_at is set by the domain; role assignments need per-row timestamps.
-_CREATED_AT_DEFAULTS = {"audios": None, "documentation": None, "user_roles": "clock_timestamp()"}
+_CREATED_AT_DEFAULTS = {
+    "audios": None,
+    "documentation": None,
+    "user_role_assignments": "clock_timestamp()",
+}
 
 
 def _alembic_config() -> Config:
@@ -50,7 +54,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0014_documentation",)]
+    assert versions == [("0015_scoped_role_assignments",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -128,8 +132,20 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("fk_question_variants_qaset_id_qasets", "question_variants", "qasets", "CASCADE"),
         ("fk_role_permissions_role_id_roles", "role_permissions", "roles", "CASCADE"),
         ("fk_themes_protocol_id_protocols", "themes", "protocols", "RESTRICT"),
-        ("fk_user_roles_role_id_roles", "user_roles", "roles", "RESTRICT"),
-        ("fk_user_roles_user_id_users", "user_roles", "users", "CASCADE"),
+        (
+            "fk_user_role_assignments_language_id_languages",
+            "user_role_assignments",
+            "languages",
+            "CASCADE",
+        ),
+        (
+            "fk_user_role_assignments_project_id_projects",
+            "user_role_assignments",
+            "projects",
+            "CASCADE",
+        ),
+        ("fk_user_role_assignments_role_id_roles", "user_role_assignments", "roles", "RESTRICT"),
+        ("fk_user_role_assignments_user_id_users", "user_role_assignments", "users", "CASCADE"),
         (
             "fk_validation_events_actor_user_id_users",
             "validation_events",
@@ -229,14 +245,14 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             postgres_url,
             "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
             f"WHERE table_schema = '{SCHEMA}' "
-            "AND table_name IN ('users', 'roles', 'role_permissions', 'user_roles') "
+            "AND table_name IN ('users', 'roles', 'role_permissions', 'user_role_assignments') "
             "AND constraint_type IN ('PRIMARY KEY', 'UNIQUE') ORDER BY constraint_name",
         )
     )
     assert access_constraints == [
         ("pk_role_permissions", "PRIMARY KEY"),
         ("pk_roles", "PRIMARY KEY"),
-        ("pk_user_roles", "PRIMARY KEY"),
+        ("pk_user_role_assignments", "PRIMARY KEY"),
         ("pk_users", "PRIMARY KEY"),
         ("uq_roles_key", "UNIQUE"),
     ]
@@ -250,6 +266,17 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     assert [name for name, _ in user_indexes] == ["uq_users_email_lower", "uq_users_subject"]
     assert "lower(email)" in str(user_indexes[0][1])
     assert "WHERE (subject IS NOT NULL)" in str(user_indexes[1][1])
+    assignment_indexes = asyncio.run(
+        _query(
+            postgres_url,
+            f"SELECT indexdef FROM pg_indexes WHERE schemaname = '{SCHEMA}' "
+            "AND indexname = 'uq_user_role_assignments_scope'",
+        )
+    )
+    [(scope_index,)] = assignment_indexes
+    assert "UNIQUE" in str(scope_index)
+    assert "COALESCE(project_id" in str(scope_index)
+    assert "COALESCE(language_id" in str(scope_index)
     validation_constraints = asyncio.run(
         _query(
             postgres_url,
@@ -303,7 +330,9 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_question_variants_language_id",),
         ("ix_question_variants_qaset_id_language_id",),
         ("ix_themes_protocol_id",),
-        ("ix_user_roles_role_id",),
+        ("ix_user_role_assignments_language_id",),
+        ("ix_user_role_assignments_project_id",),
+        ("ix_user_role_assignments_role_id",),
         ("ix_validation_events_actor_user_id",),
         ("ix_validations_current_state",),
         ("ix_variant_intents_intent_id",),
@@ -329,7 +358,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             "documentation",
             "qaset_categories",
             "question_variants",
-            "user_roles",
+            "user_role_assignments",
             "variant_intents",
             "variant_translation_links",
         )
@@ -344,6 +373,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
                 "OR table_name LIKE '%translation_links' OR table_name LIKE '%intents' "
                 "OR table_name LIKE '%categories' OR table_name = 'audios' "
                 "OR table_name IN ('users', 'roles', 'role_permissions', 'user_roles', "
+                "'user_role_assignments', "
                 "'validations', 'validation_events', 'documentation'))",
             )
         )
@@ -374,3 +404,71 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     assert (
         asyncio.run(_query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")) == []
     )
+
+
+def test_existing_role_assignments_become_global_and_come_back(
+    postgres_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """0015 turns every user_roles row into a global assignment; its downgrade keeps only the
+    global ones, never widening a scoped assignment."""
+    schema = "qa_authoring_it_rbac"
+    monkeypatch.setenv("QA_AUTHORING_DATABASE_URL", postgres_url)
+    monkeypatch.setenv("QA_AUTHORING_DB_SCHEMA", schema)
+    monkeypatch.delenv("QA_AUTHORING_DB_INSTANCE_CONNECTION_NAME", raising=False)
+    user, role = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+    project, language = (
+        "33333333-3333-3333-3333-333333333333",
+        "44444444-4444-4444-4444-444444444444",
+    )
+
+    async def execute(*statements: str) -> None:
+        engine = create_async_engine(postgres_url)
+        try:
+            async with engine.begin() as connection:
+                for statement in statements:
+                    await connection.execute(text(statement))
+        finally:
+            await engine.dispose()
+
+    command.upgrade(_alembic_config(), "0014_documentation")
+    asyncio.run(
+        execute(
+            f"INSERT INTO {schema}.users (id, email, display_name) "
+            f"VALUES ('{user}', 'a@x.org', 'A')",
+            f"INSERT INTO {schema}.roles (id, name, key) VALUES ('{role}', 'R', 'r')",
+            f"INSERT INTO {schema}.user_roles (user_id, role_id) VALUES ('{user}', '{role}')",
+        )
+    )
+    command.upgrade(_alembic_config(), "head")
+    assignments = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT user_id::text, role_id::text, project_id, language_id "
+            f"FROM {schema}.user_role_assignments",
+        )
+    )
+    assert assignments == [(user, role, None, None)]
+    tables = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_schema = '{schema}' AND table_name = 'user_roles'",
+        )
+    )
+    assert tables == []
+
+    asyncio.run(
+        execute(
+            f"INSERT INTO {schema}.languages (id, code, name) VALUES ('{language}', 'fr', 'F')",
+            f"INSERT INTO {schema}.projects (id, name, base_language_id) "
+            f"VALUES ('{project}', 'P', '{language}')",
+            f"INSERT INTO {schema}.user_role_assignments (id, user_id, role_id, project_id) "
+            f"VALUES (gen_random_uuid(), '{user}', '{role}', '{project}')",
+        )
+    )
+    command.downgrade(_alembic_config(), "0014_documentation")
+    restored = asyncio.run(
+        _query(postgres_url, f"SELECT user_id::text, role_id::text FROM {schema}.user_roles")
+    )
+    assert restored == [(user, role)]
+    command.downgrade(_alembic_config(), "base")

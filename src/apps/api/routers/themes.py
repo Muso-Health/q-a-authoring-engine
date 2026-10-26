@@ -5,7 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
-from apps.api.auth import requires
+from apps.api.auth import requires, visible
 from apps.api.dependencies import get_container
 from apps.api.schemas.catalog import (
     CreateNamedRequest,
@@ -18,6 +18,7 @@ from qa_authoring.application.create_theme.command import CreateThemeCommand
 from qa_authoring.application.delete_theme.command import DeleteThemeCommand
 from qa_authoring.application.get_theme.command import GetThemeQuery
 from qa_authoring.application.list_themes.command import ListThemesQuery
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.application.update_theme.command import UpdateThemeCommand
 from qa_authoring.domain.model.permission import Permission
 
@@ -41,13 +42,13 @@ async def create_theme(
     return ThemeResponse.of(await container.run(container.build_create_theme, command))
 
 
-@router.get("/protocols/{protocol_id}/themes")
+@router.get("/protocols/{protocol_id}/themes", dependencies=[visible(ResourceKind.PROTOCOL)])
 async def list_themes(protocol_id: UUID, container: ContainerDep) -> ThemesResponse:
     query = ListThemesQuery(protocol_id)
     return ThemesResponse.of(await container.run(container.build_list_themes, query))
 
 
-@router.get("/themes/{theme_id}")
+@router.get("/themes/{theme_id}", dependencies=[visible(ResourceKind.THEME)])
 async def get_theme(theme_id: UUID, container: ContainerDep) -> ThemeResponse:
     query = GetThemeQuery(theme_id)
     return ThemeResponse.of(await container.run(container.build_get_theme, query))

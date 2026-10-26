@@ -5,7 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, UploadFile, status
 
-from apps.api.auth import requires
+from apps.api.auth import requires, visible
 from apps.api.dependencies import get_container
 from apps.api.schemas.documentation import (
     CompletenessResponse,
@@ -22,6 +22,7 @@ from qa_authoring.application.get_documentation_download_url.command import (
     GetDocumentationDownloadUrlQuery,
 )
 from qa_authoring.application.list_documentation.command import ListDocumentationQuery
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.application.upload_documentation.command import UploadDocumentationCommand
 from qa_authoring.domain.model.permission import Permission
 
@@ -48,7 +49,7 @@ async def upload_documentation(
     )
 
 
-@router.get("/themes/{theme_id}/documentation")
+@router.get("/themes/{theme_id}/documentation", dependencies=[visible(ResourceKind.THEME)])
 async def list_documentation(theme_id: UUID, container: ContainerDep) -> DocumentationListResponse:
     query = ListDocumentationQuery(theme_id)
     return DocumentationListResponse.of(
@@ -69,7 +70,10 @@ async def delete_documentation(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/documentation/{documentation_id}/download-url")
+@router.get(
+    "/documentation/{documentation_id}/download-url",
+    dependencies=[visible(ResourceKind.DOCUMENTATION)],
+)
 async def get_documentation_download_url(
     documentation_id: UUID, container: ContainerDep
 ) -> DownloadUrlResponse:
@@ -80,7 +84,10 @@ async def get_documentation_download_url(
     )
 
 
-@router.post("/themes/{theme_id}/completeness", dependencies=[requires(Permission.AUTHOR_QASETS)])
+@router.post(
+    "/themes/{theme_id}/completeness",
+    dependencies=[requires(Permission.AUTHOR_QASETS, on=ResourceKind.THEME)],
+)
 async def analyze_theme_completeness(
     theme_id: UUID, container: ContainerDep
 ) -> CompletenessResponse:

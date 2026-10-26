@@ -10,9 +10,13 @@ from apps.api.dependencies import get_container
 from apps.api.schemas.generation import GeneratedVariantsResponse, GenerateVariantsRequest
 from config.container import Container
 from qa_authoring.application.generate_variants.command import GenerateVariantsQuery
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.domain.model.permission import Permission
 
-router = APIRouter(tags=["generation"], dependencies=[requires(Permission.AUTHOR_QASETS)])
+router = APIRouter(
+    tags=["generation"],
+    dependencies=[requires(Permission.AUTHOR_QASETS, on=ResourceKind.QASET)],
+)
 
 ContainerDep = Annotated[Container, Depends(get_container)]
 

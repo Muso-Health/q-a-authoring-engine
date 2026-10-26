@@ -2,20 +2,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qa_authoring.application.access_response import UserResult
-
 if TYPE_CHECKING:
+    from qa_authoring.application.access_loading import UserViews
+    from qa_authoring.application.access_response import UserResult
     from qa_authoring.application.list_users.command import ListUsersQuery
-    from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.user_repository import UserRepository
 
 
 class ListUsersHandler:
-    def __init__(self, users: UserRepository, roles: RoleRepository) -> None:
+    def __init__(self, users: UserRepository, views: UserViews) -> None:
         self._users = users
-        self._roles = roles
+        self._views = views
 
     async def __call__(self, query: ListUsersQuery) -> tuple[UserResult, ...]:
-        users = await self._users.list()
-        roles = await self._roles.get_many({r for user in users for r in user.role_ids})
-        return tuple(UserResult.of(user, roles) for user in users)
+        return await self._views.many(await self._users.list())

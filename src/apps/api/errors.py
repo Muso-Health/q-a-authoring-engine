@@ -54,9 +54,9 @@ from qa_authoring.application.role_errors import (
 from qa_authoring.application.theme_errors import ThemeHasQASetsError, ThemeNotFoundError
 from qa_authoring.application.translation_engines import UnknownEngineError
 from qa_authoring.application.user_errors import (
+    AssignmentNotFoundError,
     EmailAlreadyExistsError,
     NotProvisionedError,
-    RoleNotAssignedError,
     UserNotFoundError,
 )
 from qa_authoring.application.validation_errors import (
@@ -112,7 +112,7 @@ _RULES: dict[type[Exception], _Rule] = {
     PermissionDeniedError: _Rule(403, "permission_denied"),
     UserNotFoundError: _Rule(404, "user_not_found"),
     RoleNotFoundError: _Rule(404, "role_not_found"),
-    RoleNotAssignedError: _Rule(404, "role_not_assigned"),
+    AssignmentNotFoundError: _Rule(404, "assignment_not_found"),
     PromptTemplateNotFoundError: _Rule(404, "prompt_template_not_found"),
     DocumentationNotFoundError: _Rule(404, "documentation_not_found"),
     NoDocumentationError: _Rule(409, "no_documentation"),

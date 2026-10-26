@@ -120,10 +120,17 @@ PYTHONPATH=src uvicorn main:app --reload
 The liveness probe is `GET /health`, and interactive API docs are served at `/docs`.
 
 Every other endpoint requires an authenticated, **provisioned** user: the identity's email must
-belong to an active user created by an administrator (no self-sign-up). Reads need nothing more;
-each write needs a permission from the fixed catalogue (`GET /permissions`), granted through
-roles. `GET /me` returns the current user's effective permissions. To get in the first time,
-set `QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL`; with the `dev` provider, send `X-Dev-User: <that email>`.
+belong to an active user created by an administrator (no self-sign-up). Each write needs a
+permission from the fixed catalogue (`GET /permissions`), granted through roles that are assigned
+within a scope: a project and a language, either of which may be left empty to mean any
+(`POST /users/{id}/assignments`). Global permissions (managing access, prompts, languages,
+intents, categories and the catalog) ignore the scope; authoring, clinical validation and export
+are checked against the resource's project; translation and audio validation (and audio
+recording) against its project and language. A user sees only the projects one of their
+assignments covers: other projects are not listed, and reading them or anything inside them
+answers 404. `GET /me` returns the current user's assignments and effective grants. To get in
+the first time, set `QA_AUTHORING_BOOTSTRAP_ADMIN_EMAIL` (that user is assigned the admin role
+globally); with the `dev` provider, send `X-Dev-User: <that email>`.
 
 The prompts sent to language models (translation, question-variant generation) are
 organization-wide templates under `/prompt-templates`: one active template per use, readable

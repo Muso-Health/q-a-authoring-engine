@@ -59,7 +59,7 @@ _TABLES = (
     "prompt_templates",
     "validation_events",
     "validations",
-    "user_roles",
+    "user_role_assignments",
     "role_permissions",
     "users",
     "roles",

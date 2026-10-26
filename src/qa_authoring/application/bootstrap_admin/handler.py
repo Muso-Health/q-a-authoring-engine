@@ -16,8 +16,8 @@ ADMIN_ROLE_NAME = "admin"
 
 class BootstrapAdminHandler:
     """Idempotently ensure an ``admin`` role holding every permission, and an active user with
-    ``email`` holding it — the way in when no one has access yet. Safe to run on every start;
-    it also repairs the admin role after the catalogue grows."""
+    ``email`` holding it globally (any project, any language) — the way in when no one has access
+    yet. Safe to run on every start; it also repairs the admin role after the catalogue grows."""
 
     def __init__(self, users: UserRepository, roles: RoleRepository) -> None:
         self._users = users
@@ -36,9 +36,10 @@ class BootstrapAdminHandler:
         user = await self._users.find_by_email(command.email)
         if user is None:
             user = User.create(email=command.email, display_name=command.email.strip())
-            user.assign_role(role.id)
+            user.assign(role.id)
             await self._users.add(user)
-        elif not user.is_active or role.id not in user.role_ids:
+            return
+        _, assigned = user.assign(role.id)
+        if assigned or not user.is_active:
             user.set_active(True)
-            user.assign_role(role.id)
             await self._users.update(user)

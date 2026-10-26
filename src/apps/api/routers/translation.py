@@ -13,11 +13,15 @@ from apps.api.schemas.translation import (
     TranslateRequest,
 )
 from config.container import Container
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.application.translate_answer.command import TranslateAnswerCommand
 from qa_authoring.application.translate_variant.command import TranslateVariantCommand
 from qa_authoring.domain.model.permission import Permission
 
-router = APIRouter(tags=["translation"], dependencies=[requires(Permission.AUTHOR_QASETS)])
+router = APIRouter(
+    tags=["translation"],
+    dependencies=[requires(Permission.AUTHOR_QASETS, on=ResourceKind.QASET)],
+)
 
 ContainerDep = Annotated[Container, Depends(get_container)]
 

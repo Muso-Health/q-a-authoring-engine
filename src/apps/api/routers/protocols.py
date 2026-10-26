@@ -5,7 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
-from apps.api.auth import requires
+from apps.api.auth import requires, visible
 from apps.api.dependencies import get_container
 from apps.api.schemas.catalog import (
     CreateNamedRequest,
@@ -18,6 +18,7 @@ from qa_authoring.application.create_protocol.command import CreateProtocolComma
 from qa_authoring.application.delete_protocol.command import DeleteProtocolCommand
 from qa_authoring.application.get_protocol.command import GetProtocolQuery
 from qa_authoring.application.list_protocols.command import ListProtocolsQuery
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.application.update_protocol.command import UpdateProtocolCommand
 from qa_authoring.domain.model.permission import Permission
 
@@ -41,13 +42,13 @@ async def create_protocol(
     return ProtocolResponse.of(await container.run(container.build_create_protocol, command))
 
 
-@router.get("/projects/{project_id}/protocols")
+@router.get("/projects/{project_id}/protocols", dependencies=[visible(ResourceKind.PROJECT)])
 async def list_protocols(project_id: UUID, container: ContainerDep) -> ProtocolsResponse:
     query = ListProtocolsQuery(project_id)
     return ProtocolsResponse.of(await container.run(container.build_list_protocols, query))
 
 
-@router.get("/protocols/{protocol_id}")
+@router.get("/protocols/{protocol_id}", dependencies=[visible(ResourceKind.PROTOCOL)])
 async def get_protocol(protocol_id: UUID, container: ContainerDep) -> ProtocolResponse:
     query = GetProtocolQuery(protocol_id)
     return ProtocolResponse.of(await container.run(container.build_get_protocol, query))

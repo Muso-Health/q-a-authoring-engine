@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     )
     from qa_authoring.application.ports.protocol_repository import ProtocolRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
+    from qa_authoring.application.ports.resource_scopes import ResourceScopes
     from qa_authoring.application.ports.role_repository import RoleRepository
     from qa_authoring.application.ports.theme_repository import ThemeRepository
     from qa_authoring.application.ports.user_repository import UserRepository
@@ -42,6 +43,7 @@ class UnitOfWork(Protocol):
     prompt_templates: PromptTemplateRepository
     documentation: DocumentationRepository
     validation_queues: ValidationQueuesPort
+    resource_scopes: ResourceScopes
 
     def after_commit(self, action: Callable[[], Awaitable[None]]) -> None:
         """Run ``action`` once the transaction has committed; best-effort, never rolled back.

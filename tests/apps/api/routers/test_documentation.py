@@ -53,6 +53,7 @@ class World:
         self.client = client
         self.fr = _ok(client.post("/languages", json={"code": "fr", "name": "French"}))["id"]
         project = _ok(client.post("/projects", json={"name": "P", "base_language_id": self.fr}))
+        self.project = project["id"]
         protocol = _ok(client.post(f"/projects/{project['id']}/protocols", json={"name": "Pr"}))
         self.theme = _ok(client.post(f"/protocols/{protocol['id']}/themes", json={"name": "T"}))[
             "id"
@@ -137,7 +138,7 @@ def test_completeness(setup: tuple[TestClient, InMemoryStore], world: World) -> 
 def test_permissions(setup: tuple[TestClient, InMemoryStore], world: World) -> None:
     client, store = setup
     doc = _ok(client.post(world.url, files=_file(b"Malaria.")))
-    seed_user(store, "reader@example.org")
+    seed_user(store, "reader@example.org", project_id=world.project)
     seed_user(store, "author@example.org", Permission.AUTHOR_QASETS)
     reader, author = {"X-Dev-User": "reader@example.org"}, {"X-Dev-User": "author@example.org"}
 

@@ -26,8 +26,8 @@ class NotProvisionedError(Exception):
         self.email = email
 
 
-class RoleNotAssignedError(Exception):
-    def __init__(self, user_id: UUID, role_id: UUID) -> None:
-        super().__init__(f"user {user_id} does not hold role {role_id}")
+class AssignmentNotFoundError(Exception):
+    def __init__(self, user_id: UUID, assignment_id: UUID) -> None:
+        super().__init__(f"user {user_id} has no role assignment {assignment_id}")
         self.user_id = user_id
-        self.role_id = role_id
+        self.assignment_id = assignment_id

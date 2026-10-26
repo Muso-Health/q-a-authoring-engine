@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
     true,
 )
 
@@ -54,12 +55,31 @@ role_permissions = Table(
     PrimaryKeyConstraint("role_id", "permission_code"),
 )
 
-user_roles = Table(
-    "user_roles",
+# Nulls are wildcards (any project / any language). The scope is unique per user and role with
+# nulls compared as a value: PostgreSQL 14 has no NULLS NOT DISTINCT, hence the coalesce.
+_ANY = text("'00000000-0000-0000-0000-000000000000'::uuid")
+
+user_role_assignments = Table(
+    "user_role_assignments",
     metadata,
+    Column("id", Uuid, nullable=False),
     Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
     Column(
         "role_id", Uuid, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False, index=True
+    ),
+    Column(
+        "project_id",
+        Uuid,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    ),
+    Column(
+        "language_id",
+        Uuid,
+        ForeignKey("languages.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     ),
     # clock_timestamp, not now(): several roles assigned in one transaction keep their order.
     Column(
@@ -68,5 +88,13 @@ user_roles = Table(
         server_default=func.clock_timestamp(),
         nullable=False,
     ),
-    PrimaryKeyConstraint("user_id", "role_id"),
+    PrimaryKeyConstraint("id"),
+)
+Index(
+    "uq_user_role_assignments_scope",
+    user_role_assignments.c.user_id,
+    user_role_assignments.c.role_id,
+    func.coalesce(user_role_assignments.c.project_id, _ANY),
+    func.coalesce(user_role_assignments.c.language_id, _ANY),
+    unique=True,
 )

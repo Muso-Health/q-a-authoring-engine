@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
@@ -8,9 +9,6 @@ from qa_authoring.domain.value_objects.naming import clean_name
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-
-    from qa_authoring.domain.model.permission import Permission
-    from qa_authoring.domain.model.role import Role
 
 _EMAIL = re.compile(r"[^@\s]+@[^@\s]+")
 
@@ -36,11 +34,25 @@ def normalize_email(email: str) -> str:
     return normalized
 
 
+@dataclass(frozen=True, slots=True)
+class RoleAssignment:
+    """A role held within a scope; a null project or language means any."""
+
+    role_id: UUID
+    project_id: UUID | None = None
+    language_id: UUID | None = None
+    id: UUID = field(default_factory=uuid4)
+
+    @property
+    def scope(self) -> tuple[UUID, UUID | None, UUID | None]:
+        return (self.role_id, self.project_id, self.language_id)
+
+
 class User:
     """A provisioned person, identified by email (case-insensitive). ``subject`` is the identity
     provider's stable id, bound on first sign-in. Only active users are authorized."""
 
-    __slots__ = ("_display_name", "_email", "_id", "_is_active", "_role_ids", "_subject")
+    __slots__ = ("_assignments", "_display_name", "_email", "_id", "_is_active", "_subject")
 
     def __init__(
         self,
@@ -50,14 +62,14 @@ class User:
         *,
         subject: str | None = None,
         is_active: bool = True,
-        role_ids: Iterable[UUID] = (),
+        assignments: Iterable[RoleAssignment] = (),
     ) -> None:
         self._id = user_id
         self._email = normalize_email(email)
         self._display_name = clean_name(display_name, subject="user")
         self._subject = subject
         self._is_active = is_active
-        self._role_ids: dict[UUID, None] = dict.fromkeys(role_ids)
+        self._assignments = list(assignments)
 
     @classmethod
     def create(cls, *, email: str, display_name: str) -> User:
@@ -84,8 +96,12 @@ class User:
         return self._is_active
 
     @property
+    def assignments(self) -> tuple[RoleAssignment, ...]:
+        return tuple(self._assignments)
+
+    @property
     def role_ids(self) -> tuple[UUID, ...]:
-        return tuple(self._role_ids)
+        return tuple(dict.fromkeys(a.role_id for a in self._assignments))
 
     def rename(self, display_name: str) -> None:
         self._display_name = clean_name(display_name, subject="user")
@@ -93,17 +109,22 @@ class User:
     def set_active(self, is_active: bool) -> None:
         self._is_active = is_active
 
-    def assign_role(self, role_id: UUID) -> bool:
-        if role_id in self._role_ids:
-            return False
-        self._role_ids[role_id] = None
-        return True
+    def assign(
+        self, role_id: UUID, *, project_id: UUID | None = None, language_id: UUID | None = None
+    ) -> tuple[RoleAssignment, bool]:
+        """Idempotent per (role, project, language): the flag says whether it was just added."""
+        wanted = RoleAssignment(role_id, project_id, language_id)
+        existing = next((a for a in self._assignments if a.scope == wanted.scope), None)
+        if existing is not None:
+            return existing, False
+        self._assignments.append(wanted)
+        return wanted, True
 
-    def unassign_role(self, role_id: UUID) -> bool:
-        if role_id not in self._role_ids:
-            return False
-        del self._role_ids[role_id]
-        return True
+    def unassign(self, assignment_id: UUID) -> bool:
+        kept = [a for a in self._assignments if a.id != assignment_id]
+        removed = len(kept) != len(self._assignments)
+        self._assignments = kept
+        return removed
 
     def bind_subject(self, subject: str) -> bool:
         """Bind the identity provider's subject on first sign-in; True if it was just bound."""
@@ -122,11 +143,3 @@ class User:
 
     def __repr__(self) -> str:
         return f"User(id={self._id}, email={self._email!r})"
-
-
-def effective_permissions(user: User, roles: Iterable[Role]) -> frozenset[Permission]:
-    """The union of the permissions of the user's roles; none at all for an inactive user."""
-    if not user.is_active:
-        return frozenset()
-    assigned = set(user.role_ids)
-    return frozenset(p for role in roles if role.id in assigned for p in role.permissions)

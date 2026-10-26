@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from qa_authoring.application.access_loading import UserViews
 from qa_authoring.application.add_category.handler import AddCategoryHandler
 from qa_authoring.application.add_language_presence.handler import AddLanguagePresenceHandler
 from qa_authoring.application.add_question_variant.handler import AddQuestionVariantHandler
@@ -85,6 +86,7 @@ from qa_authoring.application.register_language.handler import RegisterLanguageH
 from qa_authoring.application.remove_category.handler import RemoveCategoryHandler
 from qa_authoring.application.remove_language_presence.handler import RemoveLanguagePresenceHandler
 from qa_authoring.application.resolve_current_user.handler import ResolveCurrentUserHandler
+from qa_authoring.application.resolve_resource_scope.handler import ResolveResourceScopeHandler
 from qa_authoring.application.seed_prompt_templates.handler import SeedPromptTemplatesHandler
 from qa_authoring.application.set_answer_audio.handler import SetAnswerAudioHandler
 from qa_authoring.application.set_variant_audio.handler import SetVariantAudioHandler
@@ -185,6 +187,10 @@ class Container:
     @staticmethod
     def _views(uow: UnitOfWork) -> QASetViews:
         return QASetViews(uow.intents, uow.categories, uow.validations)
+
+    @staticmethod
+    def _user_views(uow: UnitOfWork) -> UserViews:
+        return UserViews(uow.roles, uow.projects, uow.languages)
 
     @staticmethod
     def _base_language(uow: UnitOfWork) -> BaseLanguageResolver:
@@ -402,19 +408,21 @@ class Container:
         return CreateUserHandler(uow.users)
 
     def build_list_users(self, uow: UnitOfWork) -> ListUsersHandler:
-        return ListUsersHandler(uow.users, uow.roles)
+        return ListUsersHandler(uow.users, self._user_views(uow))
 
     def build_get_user(self, uow: UnitOfWork) -> GetUserHandler:
-        return GetUserHandler(uow.users, uow.roles)
+        return GetUserHandler(uow.users, self._user_views(uow))
 
     def build_update_user(self, uow: UnitOfWork) -> UpdateUserHandler:
-        return UpdateUserHandler(uow.users, uow.roles)
+        return UpdateUserHandler(uow.users, self._user_views(uow))
 
     def build_assign_role(self, uow: UnitOfWork) -> AssignRoleHandler:
-        return AssignRoleHandler(uow.users, uow.roles)
+        return AssignRoleHandler(
+            uow.users, uow.roles, uow.projects, uow.languages, self._user_views(uow)
+        )
 
     def build_unassign_role(self, uow: UnitOfWork) -> UnassignRoleHandler:
-        return UnassignRoleHandler(uow.users, uow.roles)
+        return UnassignRoleHandler(uow.users, self._user_views(uow))
 
     def build_create_role(self, uow: UnitOfWork) -> CreateRoleHandler:
         return CreateRoleHandler(uow.roles)
@@ -436,6 +444,9 @@ class Container:
 
     def build_bootstrap_admin(self, uow: UnitOfWork) -> BootstrapAdminHandler:
         return BootstrapAdminHandler(uow.users, uow.roles)
+
+    def build_resolve_resource_scope(self, uow: UnitOfWork) -> ResolveResourceScopeHandler:
+        return ResolveResourceScopeHandler(uow.resource_scopes)
 
     def build_record_clinical_decision(self, uow: UnitOfWork) -> RecordClinicalDecisionHandler:
         return RecordClinicalDecisionHandler(

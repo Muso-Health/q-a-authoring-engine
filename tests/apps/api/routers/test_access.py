@@ -40,9 +40,14 @@ def test_permissions_lists_the_catalogue(client: TestClient) -> None:
 
 def test_me(client: TestClient) -> None:
     me = _ok(client.get("/me"), 200)
-    assert set(me) == {"id", "email", "display_name", "permissions"}  # never the subject (oid)
+    # Never the subject (oid).
+    assert set(me) == {"id", "email", "display_name", "permissions", "assignments", "grants"}
     assert me["email"] == ADMIN_EMAIL
     assert me["permissions"] == sorted(p.value for p in Permission)
+    [assignment] = me["assignments"]
+    assert (assignment["project"], assignment["language"]) == (None, None)
+    assert {g["permission"] for g in me["grants"]} == {p.value for p in Permission}
+    assert all(g["project_id"] is None and g["language_id"] is None for g in me["grants"])
 
 
 def test_role_crud(client: TestClient) -> None:
@@ -90,24 +95,34 @@ def test_user_crud_and_role_assignment(client: TestClient) -> None:
         "email": "ada@example.org",
         "display_name": "Ada",
         "is_active": True,
-        "roles": [],
+        "assignments": [],
+        "grants": [],
     }
     url = f"/users/{created['id']}"
     assert _ok(client.get(url), 200) == created
     emails = [u["email"] for u in _ok(client.get("/users"), 200)["items"]]
     assert emails == ["ada@example.org", ADMIN_EMAIL]
 
-    assigned = _ok(client.post(f"{url}/roles", json={"role_id": role["id"]}))
-    assert assigned["roles"] == [{"id": role["id"], "name": "Author"}]
-    assert _ok(client.post(f"{url}/roles", json={"role_id": role["id"]}), 200) == assigned
+    assigned = _ok(client.post(f"{url}/assignments", json={"role_id": role["id"]}))
+    [assignment] = assigned["assignments"]
+    assert assignment == {
+        "id": assignment["id"],
+        "role": {"id": role["id"], "name": "Author"},
+        "project": None,
+        "language": None,
+    }
+    assert assigned["grants"] == [
+        {"permission": "author_qasets", "project_id": None, "language_id": None}
+    ]
+    assert _ok(client.post(f"{url}/assignments", json={"role_id": role["id"]}), 200) == assigned
     _error(client.delete(f"/roles/{role['id']}"), 409, "role_in_use")
 
     patched = _ok(client.patch(url, json={"display_name": "Countess", "is_active": False}), 200)
     assert (patched["display_name"], patched["is_active"]) == ("Countess", False)
 
-    assert client.delete(f"{url}/roles/{role['id']}").status_code == 204
-    assert _ok(client.get(url), 200)["roles"] == []
-    _error(client.delete(f"{url}/roles/{role['id']}"), 404, "role_not_assigned")
+    assert client.delete(f"{url}/assignments/{assignment['id']}").status_code == 204
+    assert _ok(client.get(url), 200)["assignments"] == []
+    _error(client.delete(f"{url}/assignments/{assignment['id']}"), 404, "assignment_not_found")
 
 
 def test_user_errors(client: TestClient) -> None:
@@ -121,7 +136,7 @@ def test_user_errors(client: TestClient) -> None:
     _error(client.get(f"/users/{uuid4()}"), 404, "user_not_found")
     _error(client.patch(f"/users/{uuid4()}", json={"is_active": True}), 404, "user_not_found")
     _error(
-        client.post(f"/users/{uuid4()}/roles", json={"role_id": str(uuid4())}),
+        client.post(f"/users/{uuid4()}/assignments", json={"role_id": str(uuid4())}),
         404,
         "user_not_found",
     )

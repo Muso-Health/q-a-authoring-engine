@@ -5,7 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, UploadFile, status
 
-from apps.api.auth import requires
+from apps.api.auth import requires, visible
 from apps.api.dependencies import get_container
 from apps.api.schemas.audio import AudioResponse, PlaybackUrlResponse
 from config.container import Container
@@ -13,6 +13,7 @@ from qa_authoring.application.delete_answer_audio.command import DeleteAnswerAud
 from qa_authoring.application.delete_variant_audio.command import DeleteVariantAudioCommand
 from qa_authoring.application.get_audio.command import GetAudioQuery
 from qa_authoring.application.get_audio_playback_url.command import GetAudioPlaybackUrlQuery
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.application.set_answer_audio.command import SetAnswerAudioCommand
 from qa_authoring.application.set_variant_audio.command import SetVariantAudioCommand
 from qa_authoring.domain.model.permission import Permission
@@ -35,7 +36,7 @@ def _status(response: Response, created: bool) -> None:
 @router.post(
     "/qasets/{qaset_id}/answers/{answer_id}/audio",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[requires(Permission.MANAGE_AUDIO)],
+    dependencies=[requires(Permission.MANAGE_AUDIO, on=ResourceKind.ANSWER)],
 )
 async def set_answer_audio(
     qaset_id: UUID, answer_id: UUID, file: UploadFile, response: Response, container: ContainerDep
@@ -56,7 +57,7 @@ async def set_answer_audio(
 @router.delete(
     "/qasets/{qaset_id}/answers/{answer_id}/audio",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[requires(Permission.MANAGE_AUDIO)],
+    dependencies=[requires(Permission.MANAGE_AUDIO, on=ResourceKind.ANSWER)],
 )
 async def delete_answer_audio(qaset_id: UUID, answer_id: UUID, container: ContainerDep) -> Response:
     command = DeleteAnswerAudioCommand(qaset_id=qaset_id, answer_id=answer_id)
@@ -67,7 +68,7 @@ async def delete_answer_audio(qaset_id: UUID, answer_id: UUID, container: Contai
 @router.post(
     "/qasets/{qaset_id}/variants/{variant_id}/audio",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[requires(Permission.MANAGE_AUDIO)],
+    dependencies=[requires(Permission.MANAGE_AUDIO, on=ResourceKind.VARIANT)],
 )
 async def set_variant_audio(
     qaset_id: UUID, variant_id: UUID, file: UploadFile, response: Response, container: ContainerDep
@@ -88,7 +89,7 @@ async def set_variant_audio(
 @router.delete(
     "/qasets/{qaset_id}/variants/{variant_id}/audio",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[requires(Permission.MANAGE_AUDIO)],
+    dependencies=[requires(Permission.MANAGE_AUDIO, on=ResourceKind.VARIANT)],
 )
 async def delete_variant_audio(
     qaset_id: UUID, variant_id: UUID, container: ContainerDep
@@ -98,12 +99,12 @@ async def delete_variant_audio(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/audios/{audio_id}")
+@router.get("/audios/{audio_id}", dependencies=[visible(ResourceKind.AUDIO)])
 async def get_audio(audio_id: UUID, container: ContainerDep) -> AudioResponse:
     return AudioResponse.of(await container.run(container.build_get_audio, GetAudioQuery(audio_id)))
 
 
-@router.get("/audios/{audio_id}/playback-url")
+@router.get("/audios/{audio_id}/playback-url", dependencies=[visible(ResourceKind.AUDIO)])
 async def get_audio_playback_url(audio_id: UUID, container: ContainerDep) -> PlaybackUrlResponse:
     """A short-lived signed URL to play the recording; mint a new one when it expires."""
     query = GetAudioPlaybackUrlQuery(audio_id)

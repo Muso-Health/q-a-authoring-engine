@@ -12,9 +12,11 @@ from qa_authoring.application.create_user.command import CreateUserCommand
 from qa_authoring.application.delete_role.command import DeleteRoleCommand
 from qa_authoring.application.get_role.command import GetRoleQuery
 from qa_authoring.application.get_user.command import GetUserQuery
+from qa_authoring.application.language_errors import LanguageNotFoundError
 from qa_authoring.application.list_roles.command import ListRolesQuery
 from qa_authoring.application.list_users.command import ListUsersQuery
 from qa_authoring.application.ports.identity import Identity
+from qa_authoring.application.project_errors import ProjectNotFoundError
 from qa_authoring.application.resolve_current_user.command import ResolveCurrentUserQuery
 from qa_authoring.application.role_errors import (
     RoleInUseError,
@@ -25,9 +27,9 @@ from qa_authoring.application.unassign_role.command import UnassignRoleCommand
 from qa_authoring.application.update_role.command import UpdateRoleCommand
 from qa_authoring.application.update_user.command import UpdateUserCommand
 from qa_authoring.application.user_errors import (
+    AssignmentNotFoundError,
     EmailAlreadyExistsError,
     NotProvisionedError,
-    RoleNotAssignedError,
     UserNotFoundError,
 )
 from qa_authoring.domain.model.permission import Permission, UnknownPermissionError
@@ -36,6 +38,8 @@ from qa_authoring.domain.value_objects.naming import InvalidNameError
 from tests.fakes import in_memory_container
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from config.container import Container
     from qa_authoring.application.access_response import (
         CurrentUserResult,
@@ -58,11 +62,12 @@ async def _user(container: Container, email: str = "ada@example.org") -> UserRes
     return await container.run(container.build_create_user, CreateUserCommand(email, "Ada"))
 
 
-async def _assign(container: Container, user: UserResult, role: RoleResult) -> bool:
-    _, created = await container.run(
-        container.build_assign_role, AssignRoleCommand(user.id, role.id)
+async def _assign(
+    container: Container, user: UserResult, role: RoleResult, **scope: UUID
+) -> tuple[UserResult, bool]:
+    return await container.run(
+        container.build_assign_role, AssignRoleCommand(user.id, role.id, **scope)
     )
-    return created
 
 
 # --- roles ---
@@ -123,13 +128,13 @@ async def test_delete_role_is_guarded_while_assigned(
     container, store = world
     role = await _role(container, "Author", "author_qasets")
     user = await _user(container)
-    await _assign(container, user, role)
+    [assignment] = (await _assign(container, user, role))[0].assignments
 
     with pytest.raises(RoleInUseError):
         await container.run(container.build_delete_role, DeleteRoleCommand(role.id))
     assert role.id in store.roles.rows
 
-    await container.run(container.build_unassign_role, UnassignRoleCommand(user.id, role.id))
+    await container.run(container.build_unassign_role, UnassignRoleCommand(user.id, assignment.id))
     await container.run(container.build_delete_role, DeleteRoleCommand(role.id))
     assert role.id not in store.roles.rows
     with pytest.raises(RoleNotFoundError):
@@ -145,10 +150,11 @@ async def test_create_list_get_user(world: tuple[Container, InMemoryStore]) -> N
         container.build_create_user, CreateUserCommand(" Ada@Example.org ", " Ada Lovelace ")
     )
 
-    assert (user.email, user.display_name, user.is_active, user.roles) == (
+    assert (user.email, user.display_name, user.is_active, user.assignments, user.grants) == (
         "ada@example.org",
         "Ada Lovelace",
         True,
+        (),
         (),
     )
     assert await container.run(container.build_get_user, GetUserQuery(user.id)) == user
@@ -188,29 +194,36 @@ async def test_update_user(world: tuple[Container, InMemoryStore]) -> None:
 
 
 async def test_assign_and_unassign_roles(world: tuple[Container, InMemoryStore]) -> None:
-    container, _ = world
+    container, store = world
     user = await _user(container)
     author, recorder = await _role(container, "Author"), await _role(container, "Recorder")
 
-    assert await _assign(container, user, author) is True
-    assert await _assign(container, user, recorder) is True
-    assert await _assign(container, user, author) is False
+    assert (await _assign(container, user, author))[1] is True
+    assert (await _assign(container, user, recorder))[1] is True
+    assert (await _assign(container, user, author))[1] is False
     loaded = await container.run(container.build_get_user, GetUserQuery(user.id))
-    assert [(r.id, r.name) for r in loaded.roles] == [
-        (author.id, "Author"),
-        (recorder.id, "Recorder"),
+    assert [(a.role.id, a.role.name, a.project, a.language) for a in loaded.assignments] == [
+        (author.id, "Author", None, None),
+        (recorder.id, "Recorder", None, None),
     ]
 
     after = await container.run(
-        container.build_unassign_role, UnassignRoleCommand(user.id, author.id)
+        container.build_unassign_role, UnassignRoleCommand(user.id, loaded.assignments[0].id)
     )
-    assert [r.name for r in after.roles] == ["Recorder"]
-    with pytest.raises(RoleNotAssignedError):
-        await container.run(container.build_unassign_role, UnassignRoleCommand(user.id, author.id))
+    assert [a.role.name for a in after.assignments] == ["Recorder"]
+    with pytest.raises(AssignmentNotFoundError):
+        await container.run(
+            container.build_unassign_role, UnassignRoleCommand(user.id, loaded.assignments[0].id)
+        )
     with pytest.raises(RoleNotFoundError):
         await container.run(container.build_assign_role, AssignRoleCommand(user.id, uuid4()))
     with pytest.raises(UserNotFoundError):
         await container.run(container.build_assign_role, AssignRoleCommand(uuid4(), author.id))
+    with pytest.raises(ProjectNotFoundError):
+        await _assign(container, user, author, project_id=uuid4())
+    with pytest.raises(LanguageNotFoundError):
+        await _assign(container, user, author, language_id=uuid4())
+    assert len(store.users.rows[user.id].assignments) == 1
 
 
 # --- current user ---
@@ -291,6 +304,8 @@ async def test_bootstrap_admin_is_idempotent(world: tuple[Container, InMemorySto
     [root] = store.users.rows.values()
     assert (admin.name, admin.permissions) == ("admin", frozenset(Permission))
     assert (root.email, root.is_active, root.role_ids) == ("root@example.org", True, (admin.id,))
+    [assignment] = root.assignments
+    assert (assignment.project_id, assignment.language_id) == (None, None)
     current = await _resolve(container, "root@example.org")
     assert current.permissions == tuple(sorted(p.value for p in Permission))
 

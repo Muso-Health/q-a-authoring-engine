@@ -10,6 +10,7 @@ from apps.api.dependencies import get_container
 from apps.api.schemas.export import ExportResponse
 from config.container import Container
 from qa_authoring.application.export_project_corpus.command import ExportProjectCorpusCommand
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.domain.model.permission import Permission
 
 router = APIRouter(tags=["export"])
@@ -17,7 +18,10 @@ router = APIRouter(tags=["export"])
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-@router.post("/projects/{project_id}/export", dependencies=[requires(Permission.EXPORT_CORPUS)])
+@router.post(
+    "/projects/{project_id}/export",
+    dependencies=[requires(Permission.EXPORT_CORPUS, on=ResourceKind.PROJECT)],
+)
 async def export_project_corpus(project_id: UUID, container: ContainerDep) -> ExportResponse:
     """Export the project's clinically validated QA sets, in every language, as two Parquet
     files: ``qa_rows`` (one row per question variant) and ``translation_links``. Read-only.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qa_authoring.application.access_response import UserResult
+from qa_authoring.application.access_response import AccessReferences, UserResult
 from qa_authoring.application.user_errors import EmailAlreadyExistsError
 from qa_authoring.domain.model.user import User
 
@@ -22,4 +22,4 @@ class CreateUserHandler:
         if await self._users.find_by_email(user.email) is not None:
             raise EmailAlreadyExistsError(user.email)
         await self._users.add(user)
-        return UserResult.of(user, {})
+        return UserResult.of(user, AccessReferences({}, {}, {}))

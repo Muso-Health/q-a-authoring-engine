@@ -5,7 +5,7 @@ from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotat
 
 from fastapi import APIRouter, Depends, Response, status
 
-from apps.api.auth import requires
+from apps.api.auth import CurrentUser, requires, visible
 from apps.api.dependencies import get_container
 from apps.api.schemas.catalog import (
     CreateProjectRequest,
@@ -18,6 +18,7 @@ from qa_authoring.application.create_project.command import CreateProjectCommand
 from qa_authoring.application.delete_project.command import DeleteProjectCommand
 from qa_authoring.application.get_project.command import GetProjectQuery
 from qa_authoring.application.list_projects.command import ListProjectsQuery
+from qa_authoring.application.ports.resource_scopes import ResourceKind
 from qa_authoring.application.update_project.command import UpdateProjectCommand
 from qa_authoring.domain.model.permission import Permission
 
@@ -38,13 +39,13 @@ async def create_project(body: CreateProjectRequest, container: ContainerDep) ->
 
 
 @router.get("")
-async def list_projects(container: ContainerDep) -> ProjectsResponse:
-    return ProjectsResponse.of(
-        await container.run(container.build_list_projects, ListProjectsQuery())
-    )
+async def list_projects(user: CurrentUser, container: ContainerDep) -> ProjectsResponse:
+    """The projects the caller can see: those any of their role assignments covers."""
+    query = ListProjectsQuery(user.authorization.visible_project_ids)
+    return ProjectsResponse.of(await container.run(container.build_list_projects, query))
 
 
-@router.get("/{project_id}")
+@router.get("/{project_id}", dependencies=[visible(ResourceKind.PROJECT)])
 async def get_project(project_id: UUID, container: ContainerDep) -> ProjectResponse:
     query = GetProjectQuery(project_id)
     return ProjectResponse.of(await container.run(container.build_get_project, query))

@@ -14,7 +14,6 @@ from qa_authoring.domain.model.user import (
     InvalidEmailError,
     SubjectMismatchError,
     User,
-    effective_permissions,
 )
 from qa_authoring.domain.value_objects.naming import InvalidNameError
 
@@ -98,13 +97,15 @@ def test_user_activation() -> None:
 def test_role_assignment_is_idempotent() -> None:
     user = User.create(email="ada@example.org", display_name="Ada")
     first, second = uuid4(), uuid4()
-    assert user.assign_role(first) is True
-    assert user.assign_role(second) is True
-    assert user.assign_role(first) is False
+    a, created_a = user.assign(first)
+    b, created_b = user.assign(second)
+    again, created_again = user.assign(first)
+    assert (created_a, created_b, created_again) == (True, True, False)
+    assert again == a
     assert user.role_ids == (first, second)
-    assert user.unassign_role(first) is True
-    assert user.unassign_role(first) is False
-    assert list(user.role_ids) == [second]
+    assert user.unassign(a.id) is True
+    assert user.unassign(a.id) is False
+    assert user.assignments == (b,)
 
 
 def test_subject_is_bound_once() -> None:
@@ -114,26 +115,3 @@ def test_subject_is_bound_once() -> None:
     with pytest.raises(SubjectMismatchError):
         user.bind_subject("accounts.google.com:2")
     assert user.subject == "accounts.google.com:1"
-
-
-def test_effective_permissions_are_the_union_of_the_roles() -> None:
-    author = Role.create(name="Author", permissions=[Permission.AUTHOR_QASETS])
-    recorder = Role.create(
-        name="Recorder", permissions=[Permission.MANAGE_AUDIO, Permission.AUTHOR_QASETS]
-    )
-    other = Role.create(name="Admin", permissions=list(Permission))
-    user = User.create(email="ada@example.org", display_name="Ada")
-    user.assign_role(author.id)
-    user.assign_role(recorder.id)
-
-    assert effective_permissions(user, [author, recorder, other]) == frozenset(
-        {Permission.AUTHOR_QASETS, Permission.MANAGE_AUDIO}
-    )
-
-
-def test_an_inactive_user_has_no_permissions() -> None:
-    admin = Role.create(name="Admin", permissions=list(Permission))
-    user = User.create(email="ada@example.org", display_name="Ada")
-    user.assign_role(admin.id)
-    user.set_active(False)
-    assert effective_permissions(user, [admin]) == frozenset()

@@ -56,19 +56,24 @@ async def update_user(
     return UserResponse.of(await container.run(container.build_update_user, command))
 
 
-@router.post("/{user_id}/roles", status_code=status.HTTP_201_CREATED)
+@router.post("/{user_id}/assignments", status_code=status.HTTP_201_CREATED)
 async def assign_role(
     user_id: UUID, body: AssignRoleRequest, response: Response, container: ContainerDep
 ) -> UserResponse:
-    """Idempotent: 201 when assigned, 200 when the user already held the role."""
-    command = AssignRoleCommand(user_id, body.role_id)
+    """Assign a role within a scope; a null project or language means any. Idempotent: 201
+    when assigned, 200 when the user already held the role in that scope. 404 if the role,
+    project or language does not exist."""
+    command = AssignRoleCommand(
+        user_id, body.role_id, project_id=body.project_id, language_id=body.language_id
+    )
     result, created = await container.run(container.build_assign_role, command)
     if not created:
         response.status_code = status.HTTP_200_OK
     return UserResponse.of(result)
 
 
-@router.delete("/{user_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def unassign_role(user_id: UUID, role_id: UUID, container: ContainerDep) -> Response:
-    await container.run(container.build_unassign_role, UnassignRoleCommand(user_id, role_id))
+@router.delete("/{user_id}/assignments/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unassign_role(user_id: UUID, assignment_id: UUID, container: ContainerDep) -> Response:
+    command = UnassignRoleCommand(user_id, assignment_id)
+    await container.run(container.build_unassign_role, command)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

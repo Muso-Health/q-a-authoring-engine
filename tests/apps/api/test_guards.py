@@ -8,8 +8,9 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from apps.api.app import create_app
-from apps.api.auth import PermissionGuard, current_user
-from qa_authoring.domain.model.permission import Permission
+from apps.api.auth import PermissionGuard, VisibilityGuard, current_user
+from qa_authoring.application.ports.resource_scopes import ResourceKind
+from qa_authoring.domain.model.permission import Permission, PermissionScope
 from qa_authoring.domain.model.user import User
 from qa_authoring.infrastructure.auth.dev import DevIdentityProvider
 from tests.fakes import in_memory_container, seed_user
@@ -192,6 +193,34 @@ def test_every_route_is_guarded() -> None:
             unauthorized.append(f"{route.methods} {route.path}")
     assert unguarded == []
     assert unauthorized == []
+
+
+def test_scoped_routes_resolve_their_resource() -> None:
+    """Safety net: a project/language permission is checked within the resource of the path, and
+    a read of a catalog resource by id hides projects the caller cannot see. The validation
+    queues hold no single resource; they are scoped by their own filters."""
+    container, _ = in_memory_container()
+    app = create_app(container=container, identity_provider=DevIdentityProvider())
+    unscoped, unhidden = [], []
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        calls = list(_walk(route.dependant))
+        guards = [c for c in calls if isinstance(c, PermissionGuard)]
+        for guard in guards:
+            scoped = guard.permission.scope is not PermissionScope.GLOBAL
+            if scoped and guard.on is None and not route.path.startswith("/validation-queues"):
+                unscoped.append(f"{route.methods} {route.path}")
+            if guard.on is not None:
+                assert f"{{{guard.on.value}_id}}" in route.path, route.path
+        reads_by_id = "GET" in (route.methods or set()) and any(
+            f"{{{kind.value}_id}}" in route.path for kind in ResourceKind
+        )
+        checked = any(isinstance(c, VisibilityGuard) for c in calls) or any(g.on for g in guards)
+        if reads_by_id and not checked:
+            unhidden.append(route.path)
+    assert unscoped == []
+    assert unhidden == []
 
 
 def test_missing_provider_means_unauthenticated() -> None:
