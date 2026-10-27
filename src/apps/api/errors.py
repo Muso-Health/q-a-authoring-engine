@@ -22,6 +22,7 @@ from qa_authoring.application.documentation_errors import (
     UnsupportedDocumentTypeError,
 )
 from qa_authoring.application.export_errors import NothingToExportError
+from qa_authoring.application.glossary_errors import GlossaryTermNotFoundError
 from qa_authoring.application.intent_errors import IntentInUseError, IntentNotFoundError
 from qa_authoring.application.language_errors import (
     LanguageCodeAlreadyExistsError,
@@ -69,6 +70,10 @@ from qa_authoring.application.validation_errors import (
     NotATranslationError,
 )
 from qa_authoring.application.validation_queues import InvalidQueueFilterError
+from qa_authoring.domain.model.glossary import (
+    GlossaryFormNotFoundError,
+    InvalidGlossaryFieldError,
+)
 from qa_authoring.domain.model.language import InvalidLanguageNameError
 from qa_authoring.domain.model.permission import UnknownPermissionError
 from qa_authoring.domain.model.prompt_template import InvalidPromptTemplateError
@@ -110,6 +115,10 @@ def _answer_exists_details(exc: AnswerAlreadyExistsError) -> dict[str, Any]:
 
 def _qa_pairs_details(exc: InvalidQAPairsError) -> dict[str, Any]:
     return {"rows": list(exc.rows)}
+
+
+def _glossary_field_details(exc: InvalidGlossaryFieldError) -> dict[str, Any]:
+    return {"field": exc.field}
 
 
 def _prompt_template_details(exc: InvalidPromptTemplateError) -> dict[str, Any]:
@@ -162,6 +171,8 @@ _RULES: dict[type[Exception], _Rule] = {
     IntentNotAttachedError: _Rule(404, "intent_not_attached"),
     CategoryNotFoundError: _Rule(404, "category_not_found"),
     CategoryNotAttachedError: _Rule(404, "category_not_attached"),
+    GlossaryTermNotFoundError: _Rule(404, "glossary_term_not_found"),
+    GlossaryFormNotFoundError: _Rule(404, "glossary_form_not_found"),
     AudioNotFoundError: _Rule(404, "audio_not_found"),
     NoAudioError: _Rule(404, "audio_not_found"),
     LanguageCodeAlreadyExistsError: _Rule(409, "language_code_already_exists"),
@@ -179,6 +190,7 @@ _RULES: dict[type[Exception], _Rule] = {
     InvalidNameError: _Rule(422, "invalid_name"),
     UnknownBaseLanguageError: _Rule(422, "unknown_base_language"),
     InvalidTextError: _Rule(422, "invalid_text"),
+    InvalidGlossaryFieldError: _Rule(422, "invalid_glossary_field", _glossary_field_details),
     UnknownLanguageError: _Rule(422, "unknown_language"),
     SameLanguageError: _Rule(422, "same_language"),
     SelfLinkError: _Rule(422, "self_link"),

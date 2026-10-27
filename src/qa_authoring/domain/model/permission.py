@@ -24,6 +24,7 @@ class Permission(StrEnum):
     AUTHOR_QASETS = "author_qasets"
     MANAGE_INTENTS = "manage_intents"
     MANAGE_CATEGORIES = "manage_categories"
+    MANAGE_GLOSSARY = "manage_glossary"
     MANAGE_AUDIO = "manage_audio"
     VALIDATE_CLINICAL = "validate_clinical"
     VALIDATE_TRANSLATION = "validate_translation"
@@ -44,6 +45,7 @@ _SCOPES = {
     Permission.MANAGE_LANGUAGES: PermissionScope.GLOBAL,
     Permission.MANAGE_INTENTS: PermissionScope.GLOBAL,
     Permission.MANAGE_CATEGORIES: PermissionScope.GLOBAL,
+    Permission.MANAGE_GLOSSARY: PermissionScope.GLOBAL,
     Permission.MANAGE_CATALOG: PermissionScope.GLOBAL,
     Permission.AUTHOR_QASETS: PermissionScope.PROJECT,
     Permission.VALIDATE_CLINICAL: PermissionScope.PROJECT,

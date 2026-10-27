@@ -25,6 +25,7 @@ SCHEMA = "qa_authoring_it"
 _CREATED_AT_DEFAULTS = {
     "audios": None,
     "documentation": None,
+    "glossary_terms": None,
     "user_role_assignments": "clock_timestamp()",
     "question_variants": "clock_timestamp()",
 }
@@ -63,7 +64,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0017_variant_clock_timestamp",)]
+    assert versions == [("0018_glossary",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -120,6 +121,13 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("fk_audios_answer_id_answers", "audios", "answers", "CASCADE"),
         ("fk_audios_variant_id_question_variants", "audios", "question_variants", "CASCADE"),
         ("fk_documentation_theme_id_themes", "documentation", "themes", "CASCADE"),
+        ("fk_glossary_forms_language_id_languages", "glossary_forms", "languages", "RESTRICT"),
+        (
+            "fk_glossary_forms_term_id_glossary_terms",
+            "glossary_forms",
+            "glossary_terms",
+            "CASCADE",
+        ),
         ("fk_projects_base_language_id_languages", "projects", "languages", "RESTRICT"),
         ("fk_prompt_templates_updated_by_users", "prompt_templates", "users", "RESTRICT"),
         ("fk_protocols_project_id_projects", "protocols", "projects", "RESTRICT"),
@@ -308,6 +316,40 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("uq_validations_qaset_id", "UNIQUE"),
         ("uq_validations_variant_id", "UNIQUE"),
     ]
+    glossary_constraints = asyncio.run(
+        _query(
+            postgres_url,
+            "SELECT constraint_name, constraint_type FROM information_schema.table_constraints "
+            f"WHERE table_schema = '{SCHEMA}' AND table_name LIKE 'glossary_%' "
+            "AND constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'CHECK') "
+            "AND constraint_name NOT LIKE '%not_null' ORDER BY constraint_name",
+        )
+    )
+    assert glossary_constraints == [
+        ("ck_glossary_terms_status", "CHECK"),
+        ("pk_glossary_forms", "PRIMARY KEY"),
+        ("pk_glossary_terms", "PRIMARY KEY"),
+        ("uq_glossary_forms_term_id_language_id", "UNIQUE"),
+    ]
+    glossary_indexes = {
+        str(name): str(definition)
+        for name, definition in asyncio.run(
+            _query(
+                postgres_url,
+                f"SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = '{SCHEMA}' "
+                "AND indexname LIKE 'ix_glossary_terms_%'",
+            )
+        )
+    }
+    # Plain indexes only: the search scans the folded search_text, needing no extension.
+    assert list(glossary_indexes) == ["ix_glossary_terms_status_label"]
+    assert (
+        "USING btree (status, lower(label))" in glossary_indexes["ix_glossary_terms_status_label"]
+    )
+    extensions = asyncio.run(
+        _query(postgres_url, "SELECT extname FROM pg_extension WHERE extname <> 'plpgsql'")
+    )
+    assert extensions == []
     unique = asyncio.run(
         _query(
             postgres_url,
@@ -331,6 +373,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
         ("ix_audios_storage_uri",),
         ("ix_documentation_storage_uri",),
         ("ix_documentation_theme_id",),
+        ("ix_glossary_forms_language_id",),
+        ("ix_glossary_terms_status_label",),
         ("ix_projects_base_language_id",),
         ("ix_prompt_templates_updated_by",),
         ("ix_protocols_project_id",),
@@ -365,6 +409,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
             "answers",
             "audios",
             "documentation",
+            "glossary_terms",
             "qaset_categories",
             "question_variants",
             "user_role_assignments",
@@ -383,7 +428,8 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
                 "OR table_name LIKE '%categories' OR table_name = 'audios' "
                 "OR table_name IN ('users', 'roles', 'role_permissions', 'user_roles', "
                 "'user_role_assignments', "
-                "'validations', 'validation_events', 'documentation'))",
+                "'validations', 'validation_events', 'documentation', "
+                "'glossary_terms', 'glossary_forms'))",
             )
         )
         == []

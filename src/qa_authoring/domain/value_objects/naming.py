@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unicodedata
+
 
 class InvalidNameError(ValueError):
     """Raised when a name is blank."""
@@ -33,3 +35,10 @@ def clean_text(text: str, *, subject: str) -> str:
 def normalize_key(text: str) -> str:
     """A catalogue uniqueness key: trimmed, inner whitespace collapsed, lowercased."""
     return " ".join(text.split()).lower()
+
+
+def search_fold(text: str) -> str:
+    """A search key: accents dropped, casefolded, whitespace collapsed."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return " ".join(stripped.casefold().split())

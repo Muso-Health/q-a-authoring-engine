@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.documentation_repository import (
         DocumentationRepository,
     )
+    from qa_authoring.application.ports.glossary_repository import GlossaryRepository
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
@@ -42,6 +43,7 @@ class UnitOfWork(Protocol):
     validations: ValidationRepository
     prompt_templates: PromptTemplateRepository
     documentation: DocumentationRepository
+    glossary: GlossaryRepository
     validation_queues: ValidationQueuesPort
     resource_scopes: ResourceScopes
 

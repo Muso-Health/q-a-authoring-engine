@@ -67,7 +67,8 @@ def test_unknown_and_inactive_users_are_not_provisioned(
 def test_reads_need_only_authentication(world: tuple[TestClient, InMemoryStore]) -> None:
     client, store = world
     seed_user(store, "reader@example.org")
-    for path in ("/languages", "/projects", "/intents", "/categories", "/permissions", "/me"):
+    paths = ("/languages", "/projects", "/intents", "/categories", "/glossary/terms")
+    for path in (*paths, "/permissions", "/me"):
         assert client.get(path, headers=_as("reader@example.org")).status_code == 200, path
 
 
@@ -133,6 +134,7 @@ WRITES = [
     ),
     (Permission.MANAGE_INTENTS, "post", "/intents", {"json": {"text": "Dosage"}}),
     (Permission.MANAGE_CATEGORIES, "post", "/categories", {"json": {"name": "Malaria"}}),
+    (Permission.MANAGE_GLOSSARY, "post", "/glossary/terms", {"json": {"label": "Malaria"}}),
     (
         Permission.MANAGE_AUDIO,
         "post",

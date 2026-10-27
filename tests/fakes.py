@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from qa_authoring.application.ports.documentation_repository import (
         DocumentationRepository,
     )
+    from qa_authoring.application.ports.glossary_repository import GlossaryRepository
     from qa_authoring.application.ports.intent_repository import IntentRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.project_repository import ProjectRepository
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
     )
     from qa_authoring.domain.model.category import Category
     from qa_authoring.domain.model.documentation import Documentation
+    from qa_authoring.domain.model.glossary import GlossaryStatus, GlossaryTerm
     from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
@@ -287,6 +289,37 @@ class InMemoryCategoryRepository:
 
     async def delete(self, category_id: UUID) -> None:
         self.rows.pop(category_id, None)
+
+
+class InMemoryGlossaryRepository:
+    """Stores copies, like the database: a term changes only when saved."""
+
+    def __init__(self) -> None:
+        self.rows: dict[UUID, GlossaryTerm] = {}
+
+    async def add(self, term: GlossaryTerm) -> None:
+        self.rows[term.id] = deepcopy(term)
+
+    async def get(self, term_id: UUID) -> GlossaryTerm | None:
+        row = self.rows.get(term_id)
+        return None if row is None else deepcopy(row)
+
+    async def get_for_update(self, term_id: UUID) -> GlossaryTerm | None:
+        return await self.get(term_id)
+
+    async def save(self, term: GlossaryTerm) -> None:
+        self.rows[term.id] = deepcopy(term)
+
+    async def list(
+        self, *, status: GlossaryStatus | None, search: str | None, limit: int, offset: int
+    ) -> tuple[tuple[GlossaryTerm, ...], int]:
+        rows = [
+            row
+            for row in self.rows.values()
+            if (status is None or row.status is status) and (search is None or row.matches(search))
+        ]
+        rows.sort(key=lambda row: (row.label.lower(), str(row.id)))
+        return tuple(deepcopy(r) for r in rows[offset : offset + limit]), len(rows)
 
 
 class InMemoryRoleRepository:
@@ -629,6 +662,7 @@ class InMemoryStore:
     qasets: InMemoryQASetRepository = field(default_factory=InMemoryQASetRepository)
     intents: InMemoryIntentRepository = field(default_factory=InMemoryIntentRepository)
     categories: InMemoryCategoryRepository = field(default_factory=InMemoryCategoryRepository)
+    glossary: InMemoryGlossaryRepository = field(default_factory=InMemoryGlossaryRepository)
     audio_storage: InMemoryAudioStorage = field(default_factory=InMemoryAudioStorage)
     audio_probe: FakeAudioProbe = field(default_factory=FakeAudioProbe)
     users: InMemoryUserRepository = field(default_factory=InMemoryUserRepository)
@@ -675,6 +709,7 @@ class InMemoryUnitOfWork:
     validations: ValidationRepository
     prompt_templates: PromptTemplateRepository
     documentation: DocumentationRepository
+    glossary: GlossaryRepository
     validation_queues: ValidationQueuesPort
     resource_scopes: ResourceScopes
 
@@ -691,6 +726,7 @@ class InMemoryUnitOfWork:
         self.validations = store.validations
         self.prompt_templates = store.prompt_templates
         self.documentation = store.documentation
+        self.glossary = store.glossary
         self.validation_queues = store.validation_queues
         self.resource_scopes = store.resource_scopes
         self._events = store.events
@@ -716,14 +752,16 @@ class InMemoryUnitOfWork:
             await action()
 
 
-def in_memory_container() -> tuple[Container, InMemoryStore]:
+def in_memory_container(
+    clock: Callable[[], datetime] = lambda: NOW,
+) -> tuple[Container, InMemoryStore]:
     store = InMemoryStore()
     container = Container(
         lambda: InMemoryUnitOfWork(store),
         audio_storage=store.audio_storage,
         audio_probe=store.audio_probe,
         audio_policy=AUDIO_POLICY,
-        clock=lambda: NOW,
+        clock=clock,
         llm=store.llm,
         google_translator=store.google_translator,
         documentation_storage=store.documentation_storage,

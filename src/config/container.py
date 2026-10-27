@@ -10,11 +10,13 @@ from qa_authoring.application.add_question_variant.handler import AddQuestionVar
 from qa_authoring.application.analyze_theme_completeness.handler import (
     AnalyzeThemeCompletenessHandler,
 )
+from qa_authoring.application.archive_glossary_term.handler import ArchiveGlossaryTermHandler
 from qa_authoring.application.assign_role.handler import AssignRoleHandler
 from qa_authoring.application.attach_intent.handler import AttachIntentHandler
 from qa_authoring.application.audio_upload import AudioUploader
 from qa_authoring.application.author_qa_pairs.handler import AuthorQAPairsHandler
 from qa_authoring.application.bootstrap_admin.handler import BootstrapAdminHandler
+from qa_authoring.application.create_glossary_term.handler import CreateGlossaryTermHandler
 from qa_authoring.application.create_project.handler import CreateProjectHandler
 from qa_authoring.application.create_protocol.handler import CreateProtocolHandler
 from qa_authoring.application.create_qaset.handler import CreateQASetHandler
@@ -44,6 +46,7 @@ from qa_authoring.application.get_clinical_validation.handler import GetClinical
 from qa_authoring.application.get_documentation_download_url.handler import (
     GetDocumentationDownloadUrlHandler,
 )
+from qa_authoring.application.get_glossary_term.handler import GetGlossaryTermHandler
 from qa_authoring.application.get_intent.handler import GetIntentHandler
 from qa_authoring.application.get_language.handler import GetLanguageHandler
 from qa_authoring.application.get_project.handler import GetProjectHandler
@@ -60,6 +63,7 @@ from qa_authoring.application.link_answers.handler import LinkAnswersHandler
 from qa_authoring.application.link_variants.handler import LinkVariantsHandler
 from qa_authoring.application.list_categories.handler import ListCategoriesHandler
 from qa_authoring.application.list_documentation.handler import ListDocumentationHandler
+from qa_authoring.application.list_glossary_terms.handler import ListGlossaryTermsHandler
 from qa_authoring.application.list_intents.handler import ListIntentsHandler
 from qa_authoring.application.list_languages.handler import ListLanguagesHandler
 from qa_authoring.application.list_projects.handler import ListProjectsHandler
@@ -85,6 +89,7 @@ from qa_authoring.application.register_category.handler import RegisterCategoryH
 from qa_authoring.application.register_intent.handler import RegisterIntentHandler
 from qa_authoring.application.register_language.handler import RegisterLanguageHandler
 from qa_authoring.application.remove_category.handler import RemoveCategoryHandler
+from qa_authoring.application.remove_glossary_form.handler import RemoveGlossaryFormHandler
 from qa_authoring.application.remove_language_presence.handler import RemoveLanguagePresenceHandler
 from qa_authoring.application.resolve_current_user.handler import ResolveCurrentUserHandler
 from qa_authoring.application.resolve_resource_scope.handler import ResolveResourceScopeHandler
@@ -94,10 +99,12 @@ from qa_authoring.application.set_variant_audio.handler import SetVariantAudioHa
 from qa_authoring.application.translate_answer.handler import TranslateAnswerHandler
 from qa_authoring.application.translate_variant.handler import TranslateVariantHandler
 from qa_authoring.application.translation_engines import TranslationEngine, Translators
+from qa_authoring.application.unarchive_glossary_term.handler import UnarchiveGlossaryTermHandler
 from qa_authoring.application.unassign_role.handler import UnassignRoleHandler
 from qa_authoring.application.unlink_answers.handler import UnlinkAnswersHandler
 from qa_authoring.application.unlink_variants.handler import UnlinkVariantsHandler
 from qa_authoring.application.update_answer.handler import UpdateAnswerHandler
+from qa_authoring.application.update_glossary_term.handler import UpdateGlossaryTermHandler
 from qa_authoring.application.update_language.handler import UpdateLanguageHandler
 from qa_authoring.application.update_project.handler import UpdateProjectHandler
 from qa_authoring.application.update_prompt_template.handler import UpdatePromptTemplateHandler
@@ -107,6 +114,7 @@ from qa_authoring.application.update_role.handler import UpdateRoleHandler
 from qa_authoring.application.update_theme.handler import UpdateThemeHandler
 from qa_authoring.application.update_user.handler import UpdateUserHandler
 from qa_authoring.application.upload_documentation.handler import UploadDocumentationHandler
+from qa_authoring.application.upsert_glossary_form.handler import UpsertGlossaryFormHandler
 from qa_authoring.application.validation_reset import ValidationResetter
 from qa_authoring.application.validation_support import BaseLanguageResolver, DecisionRecorder
 from qa_authoring.infrastructure.completeness.llm_completeness_analyzer import (
@@ -383,6 +391,30 @@ class Container:
 
     def build_delete_category(self, uow: UnitOfWork) -> DeleteCategoryHandler:
         return DeleteCategoryHandler(uow.categories, uow.qasets)
+
+    def build_create_glossary_term(self, uow: UnitOfWork) -> CreateGlossaryTermHandler:
+        return CreateGlossaryTermHandler(uow.glossary, uow.languages, self._clock)
+
+    def build_update_glossary_term(self, uow: UnitOfWork) -> UpdateGlossaryTermHandler:
+        return UpdateGlossaryTermHandler(uow.glossary, self._clock)
+
+    def build_archive_glossary_term(self, uow: UnitOfWork) -> ArchiveGlossaryTermHandler:
+        return ArchiveGlossaryTermHandler(uow.glossary, self._clock)
+
+    def build_unarchive_glossary_term(self, uow: UnitOfWork) -> UnarchiveGlossaryTermHandler:
+        return UnarchiveGlossaryTermHandler(uow.glossary, self._clock)
+
+    def build_upsert_glossary_form(self, uow: UnitOfWork) -> UpsertGlossaryFormHandler:
+        return UpsertGlossaryFormHandler(uow.glossary, uow.languages, self._clock)
+
+    def build_remove_glossary_form(self, uow: UnitOfWork) -> RemoveGlossaryFormHandler:
+        return RemoveGlossaryFormHandler(uow.glossary, self._clock)
+
+    def build_get_glossary_term(self, uow: UnitOfWork) -> GetGlossaryTermHandler:
+        return GetGlossaryTermHandler(uow.glossary)
+
+    def build_list_glossary_terms(self, uow: UnitOfWork) -> ListGlossaryTermsHandler:
+        return ListGlossaryTermsHandler(uow.glossary)
 
     def build_add_category(self, uow: UnitOfWork) -> AddCategoryHandler:
         return AddCategoryHandler(uow.qasets, uow.categories, self._views(uow))

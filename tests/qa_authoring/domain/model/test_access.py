@@ -25,6 +25,7 @@ def test_the_catalogue_is_fixed() -> None:
         "author_qasets",
         "manage_intents",
         "manage_categories",
+        "manage_glossary",
         "manage_audio",
         "validate_clinical",
         "validate_translation",

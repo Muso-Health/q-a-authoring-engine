@@ -34,6 +34,7 @@ def test_every_permission_has_a_scope_class() -> None:
         Permission.MANAGE_LANGUAGES,
         Permission.MANAGE_INTENTS,
         Permission.MANAGE_CATEGORIES,
+        Permission.MANAGE_GLOSSARY,
         Permission.MANAGE_CATALOG,
     }
     assert {p for p in Permission if p.scope is PermissionScope.PROJECT} == {

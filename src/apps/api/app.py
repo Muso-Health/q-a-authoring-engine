@@ -13,6 +13,7 @@ from apps.api.routers.categories import router as categories_router
 from apps.api.routers.documentation import router as documentation_router
 from apps.api.routers.export import router as export_router
 from apps.api.routers.generation import router as generation_router
+from apps.api.routers.glossary import router as glossary_router
 from apps.api.routers.health import router as health_router
 from apps.api.routers.intents import router as intents_router
 from apps.api.routers.languages import router as languages_router
@@ -81,6 +82,7 @@ def create_app(
         qasets_router,
         intents_router,
         categories_router,
+        glossary_router,
         audio_router,
         validations_router,
         prompt_templates_router,
