@@ -12,6 +12,7 @@ from qa_authoring.application.ports.translator import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from qa_authoring.domain.model.glossary_guidance import GlossaryGuidance
     from qa_authoring.domain.model.language import Language
 
 ENGINE = "google"
@@ -48,7 +49,14 @@ class GoogleTranslator:
         self._sources: frozenset[str] | None = None
         self._targets: frozenset[str] | None = None
 
-    async def translate(self, text: str, source: Language, target: Language) -> str:
+    async def translate(
+        self,
+        text: str,
+        source: Language,
+        target: Language,
+        glossary: tuple[GlossaryGuidance, ...] = (),
+    ) -> str:
+        """The glossary guidance is not used: it guides the LLM engine only, for now."""
         if not self._project:
             raise TranslationEngineError(ENGINE, "is not configured")
         source_code, target_code = engine_code(source), engine_code(target)

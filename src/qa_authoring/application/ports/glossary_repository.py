@@ -24,6 +24,13 @@ class GlossaryRepository(Protocol):
         """Stores the term and exactly its forms. Raises ``UnknownLanguageError`` like ``add``."""
         ...
 
+    async def active_with_forms_in(
+        self, source_language_id: UUID, target_language_id: UUID
+    ) -> tuple[GlossaryTerm, ...]:
+        """The active terms with a form in both languages (with all their forms): the
+        candidates for guiding a translation between them."""
+        ...
+
     async def list(
         self, *, status: GlossaryStatus | None, search: str | None, limit: int, offset: int
     ) -> tuple[tuple[GlossaryTerm, ...], int]:

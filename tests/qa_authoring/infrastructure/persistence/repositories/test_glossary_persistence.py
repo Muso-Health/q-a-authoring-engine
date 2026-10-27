@@ -180,3 +180,34 @@ async def test_a_large_term_is_stored_and_found(migrated_engine: AsyncEngine) ->
         )
     assert (total, [t.id for t in terms]) == (1, [term.id])
     assert len(terms[0].search_text) > 6000
+
+
+async def test_the_active_terms_with_forms_in_both_languages(migrated_engine: AsyncEngine) -> None:
+    fr, bm = await _languages(migrated_engine)
+    en = Language.register(LanguageCode("en"), "English")
+    async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
+        await uow.languages.add(en)
+    both = GlossaryTerm.create("malaria", at=T0)
+    both.put_form(fr, "paludisme", synonyms=["palu"], at=T0)
+    both.put_form(bm, "sumaya", avoid=["malaria"], at=T0)
+    both.put_form(en.id, "malaria", at=T0)
+    french_only = GlossaryTerm.create("cough", at=T0)
+    french_only.put_form(fr, "toux", at=T0)
+    archived = GlossaryTerm.create("fever", at=T0)
+    archived.put_form(fr, "fièvre", at=T0)
+    archived.put_form(bm, "farigan", at=T0)
+    archived.archive(at=T0)
+    for term in (both, french_only, archived):
+        await _add(migrated_engine, term)
+
+    async with SqlAlchemyUnitOfWork(migrated_engine) as uow:
+        terms = await uow.glossary.active_with_forms_in(fr, bm)
+        reverse = await uow.glossary.active_with_forms_in(bm, fr)
+        none = await uow.glossary.active_with_forms_in(bm, uuid4())
+
+    assert [t.id for t in terms] == [both.id] == [t.id for t in reverse]
+    assert none == ()
+    [term] = terms
+    assert {f.language_id for f in term.forms} == {fr, bm, en.id}
+    fr_form = term.form(fr)
+    assert fr_form is not None and fr_form.synonyms == ("palu",)

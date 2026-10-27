@@ -530,6 +530,7 @@ class Container:
         return TranslateAnswerHandler(
             uow.qasets,
             uow.languages,
+            uow.glossary,
             self._translators(uow),
             self._views(uow),
             self._resetter(uow),
@@ -539,6 +540,7 @@ class Container:
         return TranslateVariantHandler(
             uow.qasets,
             uow.languages,
+            uow.glossary,
             self._translators(uow),
             self._views(uow),
             self._resetter(uow),

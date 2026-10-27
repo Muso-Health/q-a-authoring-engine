@@ -5,10 +5,14 @@ from typing import TYPE_CHECKING
 from qa_authoring.application.qaset_loading import load_qaset
 from qa_authoring.application.qaset_response import TranslationLinkResult
 from qa_authoring.application.translation_response import TranslatedVariantResult
-from qa_authoring.application.translation_support import translation_languages
+from qa_authoring.application.translation_support import (
+    glossary_guidance,
+    translation_languages,
+)
 from qa_authoring.domain.model.qaset import LanguagePresenceRequiredError
 
 if TYPE_CHECKING:
+    from qa_authoring.application.ports.glossary_repository import GlossaryRepository
     from qa_authoring.application.ports.language_repository import LanguageRepository
     from qa_authoring.application.ports.qaset_repository import QASetRepository
     from qa_authoring.application.qaset_views import QASetViews
@@ -26,12 +30,14 @@ class TranslateVariantHandler:
         self,
         qasets: QASetRepository,
         languages: LanguageRepository,
+        glossary: GlossaryRepository,
         translators: Translators,
         views: QASetViews,
         resetter: ValidationResetter,
     ) -> None:
         self._qasets = qasets
         self._languages = languages
+        self._glossary = glossary
         self._translators = translators
         self._views = views
         self._resetter = resetter
@@ -46,7 +52,8 @@ class TranslateVariantHandler:
             raise LanguagePresenceRequiredError(target.id)
         translator = self._translators.get(command.engine)
 
-        text = await translator.translate(variant.text, source, target)
+        guidance = await glossary_guidance(self._glossary, variant.text, source, target)
+        text = await translator.translate(variant.text, source, target, guidance)
 
         translated = qaset.add_variant(target.id, text)
         link = qaset.link_variants(variant.id, translated.id)

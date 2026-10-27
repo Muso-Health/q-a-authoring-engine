@@ -17,6 +17,7 @@ from qa_authoring.application.record_clinical_decision.command import (
 from qa_authoring.application.translate_answer.command import TranslateAnswerCommand
 from qa_authoring.application.translate_variant.command import TranslateVariantCommand
 from qa_authoring.application.translation_engines import UnknownEngineError
+from qa_authoring.domain.model.glossary import GlossaryTerm
 from qa_authoring.domain.model.language import Language
 from qa_authoring.domain.model.permission import Permission
 from qa_authoring.domain.model.project import Project
@@ -234,3 +235,47 @@ async def test_translating_into_the_base_language_resets_clinical(world: World) 
     clinical = world.store.validations.rows[ValidationSubject.for_qaset(world.qaset_id)]
     assert clinical.current_state is ValidationState.PENDING
     assert clinical.events[-1].actor_user_id == world.author
+
+
+def _glossary_term(world: World, label: str, fr: str, bm: str, avoid: list[str]) -> None:
+    term = GlossaryTerm.create(label, at=NOW)
+    term.put_form(world.fr, fr, at=NOW)
+    term.put_form(world.bm, bm, avoid=avoid, at=NOW)
+    world.store.glossary.rows[term.id] = term
+
+
+async def test_the_llm_translation_follows_the_matching_glossary_terms(world: World) -> None:
+    _glossary_term(world, "water", "eau", "ji", ["dlo"])
+    _glossary_term(world, "fever", "fièvre", "farigan", [])
+    _glossary_term(world, "cough", "toux", "sɔgɔsɔgɔ", [])  # not in the text
+    await world.translate_answer(world.bm, engine="llm")
+    await world.translate_variant(world.fr, world.bm, engine="llm")
+
+    answer_prompt, variant_prompt = world.store.llm.prompts
+    assert '- "eau" → "ji" (avoid: "dlo")' in answer_prompt
+    assert "fièvre" not in answer_prompt and "toux" not in answer_prompt
+    assert '- "fièvre" → "farigan"' in variant_prompt
+    assert '"eau"' not in variant_prompt
+    assert "{" not in answer_prompt + variant_prompt
+
+
+async def test_no_matching_term_sends_no_guidance(world: World) -> None:
+    _glossary_term(world, "cough", "toux", "sɔgɔsɔgɔ", [])
+    archived = GlossaryTerm.create("water", at=NOW)
+    archived.put_form(world.fr, "eau", at=NOW)
+    archived.put_form(world.bm, "ji", at=NOW)
+    archived.archive(at=NOW)
+    world.store.glossary.rows[archived.id] = archived
+
+    await world.translate_answer(world.bm, engine="llm")
+
+    [prompt] = world.store.llm.prompts
+    assert "(none)" in prompt
+    assert '- "' not in prompt and "toux" not in prompt and '"ji"' not in prompt
+
+
+async def test_the_google_engine_is_unaffected_by_the_glossary(world: World) -> None:
+    _glossary_term(world, "water", "eau", "ji", ["dlo"])
+    await world.translate_answer(world.bm)
+    assert world.store.google_translator.calls == [("Buvez de l'eau.", "fr", "bm")]
+    assert world.qaset.presence(world.bm).answer.text == "bm: Buvez de l'eau."

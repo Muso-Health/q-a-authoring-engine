@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from config.container import Container
     from tests.fakes import InMemoryStore
 
-TRANSLATION = "Translate {text} from {source_language} into {target_language}."
+TRANSLATION = "Translate {text} from {source_language} into {target_language}. {glossary}"
 
 
 @pytest.fixture
@@ -133,7 +133,12 @@ async def test_the_port_renders_the_active_template(world: tuple[Container, InMe
     container, store = world
     editor = seed_user(store, "editor@example.org", Permission.MANAGE_PROMPTS).id
     await _seed(container)
-    values = {"source_language": "French", "target_language": "Bambara", "text": "Buvez de l'eau."}
+    values = {
+        "source_language": "French",
+        "target_language": "Bambara",
+        "text": "Buvez de l'eau.",
+        "glossary": "(none)",
+    }
 
     async def render() -> str:
         async with container.unit_of_work() as uow:
@@ -145,7 +150,7 @@ async def test_the_port_renders_the_active_template(world: tuple[Container, InMe
         container.build_update_prompt_template,
         UpdatePromptTemplateCommand("translation", TRANSLATION, actor_user_id=editor),
     )
-    assert await render() == "Translate Buvez de l'eau. from French into Bambara."
+    assert await render() == "Translate Buvez de l'eau. from French into Bambara. (none)"
 
     async with container.unit_of_work() as uow:
         with pytest.raises(PromptRenderError):

@@ -10,6 +10,7 @@ from qa_authoring.application.ports.translator import (
     TranslationEngineError,
     UnsupportedLanguageForEngineError,
 )
+from qa_authoring.domain.model.glossary_guidance import GlossaryGuidance
 from qa_authoring.domain.model.language import Language
 from qa_authoring.domain.model.prompt_template import PromptTemplateKey
 from qa_authoring.domain.value_objects.language_code import LanguageCode
@@ -45,11 +46,17 @@ async def test_llm_translator_renders_the_translation_template_with_names() -> N
     assert prompts.calls == [
         (
             PromptTemplateKey.TRANSLATION,
-            {"source_language": "French", "target_language": "Bambara", "text": "Buvez de l'eau."},
+            {
+                "source_language": "French",
+                "target_language": "Bambara",
+                "text": "Buvez de l'eau.",
+                "glossary": "(none)",
+            },
         )
     ]
     assert llm.prompts == [
-        "PROMPT source_language=French | target_language=Bambara | text=Buvez de l'eau."
+        "PROMPT glossary=(none) | source_language=French | target_language=Bambara | "
+        "text=Buvez de l'eau."
     ]
     assert translated == "Traduction du modèle"
 
@@ -68,6 +75,23 @@ async def test_llm_translator_maps_model_failures() -> None:
     with pytest.raises(TranslationEngineError) as raised:
         await LlmTranslator(FakePrompts(), llm).translate("x", FRENCH, BAMBARA)
     assert raised.value.engine == "llm"
+
+
+async def test_llm_translator_renders_the_glossary_guidance() -> None:
+    prompts = FakePrompts()
+    guidance = (
+        GlossaryGuidance("fièvre", "farigan", ()),
+        GlossaryGuidance("paludisme", "sumaya", ("malaria", "palu")),
+    )
+
+    await LlmTranslator(prompts, FakeLlm()).translate(
+        "Le paludisme donne de la fièvre.", FRENCH, BAMBARA, glossary=guidance
+    )
+
+    [(_, values)] = prompts.calls
+    assert values["glossary"] == (
+        '- "fièvre" → "farigan"\n- "paludisme" → "sumaya" (avoid: "malaria", "palu")'
+    )
 
 
 # --- Google ---
@@ -106,7 +130,10 @@ async def test_google_translates_with_mapped_codes_and_caches_the_language_list(
     client = FakeTranslationClient([_language("fr"), _language("en-GB"), _language("bm")])
     google = _google(client)
 
-    first = await google.translate("Bonjour", FRENCH, EN_GB)
+    # Glossary guidance is for the LLM engine only: Google's request does not carry it.
+    first = await google.translate(
+        "Bonjour", FRENCH, EN_GB, glossary=(GlossaryGuidance("bonjour", "hello", ()),)
+    )
     await google.translate("Merci", FRENCH, BAMBARA)
 
     assert first == "<Bonjour>"

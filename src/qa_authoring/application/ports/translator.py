@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from qa_authoring.domain.model.glossary_guidance import GlossaryGuidance
     from qa_authoring.domain.model.language import Language
 
 
@@ -22,7 +23,14 @@ class TranslationEngineError(Exception):
 
 
 class TranslatorPort(Protocol):
-    async def translate(self, text: str, source: Language, target: Language) -> str:
-        """``text`` from ``source`` into ``target``. Raises ``UnsupportedLanguageForEngineError``
-        or ``TranslationEngineError``."""
+    async def translate(
+        self,
+        text: str,
+        source: Language,
+        target: Language,
+        glossary: tuple[GlossaryGuidance, ...] = (),
+    ) -> str:
+        """``text`` from ``source`` into ``target``, following the ``glossary`` guidance where
+        the engine can. Raises ``UnsupportedLanguageForEngineError`` or
+        ``TranslationEngineError``."""
         ...

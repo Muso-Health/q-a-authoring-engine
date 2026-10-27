@@ -17,7 +17,7 @@ from qa_authoring.domain.model.prompt_template import (
 
 T0 = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 TRANSLATION = PromptTemplateKey.TRANSLATION
-VALID = "Translate from {source_language} to {target_language}:\n{text}"
+VALID = "Translate from {source_language} to {target_language}:\n{text}\nGlossary:\n{glossary}"
 
 
 def test_keys_and_their_required_placeholders() -> None:
@@ -28,7 +28,9 @@ def test_keys_and_their_required_placeholders() -> None:
     }
     assert {
         PromptTemplateKey.COMPLETENESS: frozenset({"documentation", "answers", "language"}),
-        PromptTemplateKey.TRANSLATION: frozenset({"source_language", "target_language", "text"}),
+        PromptTemplateKey.TRANSLATION: frozenset(
+            {"source_language", "target_language", "text", "glossary"}
+        ),
         PromptTemplateKey.VARIANT_GENERATION: frozenset(
             {"answer", "existing_questions", "context", "language"}
         ),
@@ -49,7 +51,7 @@ def test_missing_and_unknown_placeholders_are_listed() -> None:
         PromptTemplate.create(
             TRANSLATION, "From {source_language}: {text} {tone}", updated_by=None, at=T0
         )
-    assert raised.value.missing == ("target_language",)
+    assert raised.value.missing == ("glossary", "target_language")
     assert raised.value.unknown == ("tone",)
 
 
@@ -94,28 +96,39 @@ def test_render_substitutes_values_and_keeps_literal_braces() -> None:
     template = PromptTemplate.create(
         TRANSLATION,
         'Return JSON like {{"translation": "..."}} from {source_language} to '
-        "{target_language}: {text}",
+        "{target_language}: {text} {glossary}",
         updated_by=None,
         at=T0,
     )
 
     rendered = template.render(
-        {"source_language": "French", "target_language": "Bambara", "text": "Buvez {beaucoup}"}
+        {
+            "source_language": "French",
+            "target_language": "Bambara",
+            "text": "Buvez {beaucoup}",
+            "glossary": "(none)",
+        }
     )
 
     assert rendered == (
-        'Return JSON like {"translation": "..."} from French to Bambara: Buvez {beaucoup}'
+        'Return JSON like {"translation": "..."} from French to Bambara: Buvez {beaucoup} (none)'
     )
 
 
 def test_render_needs_exactly_the_template_values() -> None:
     template = PromptTemplate.create(TRANSLATION, VALID, updated_by=None, at=T0)
     with pytest.raises(PromptRenderError) as missing:
-        template.render({"source_language": "French", "text": "x"})
+        template.render({"source_language": "French", "text": "x", "glossary": ""})
     assert missing.value.missing == ("target_language",)
     with pytest.raises(PromptRenderError) as unexpected:
         template.render(
-            {"source_language": "fr", "target_language": "bm", "text": "x", "tone": "warm"}
+            {
+                "source_language": "fr",
+                "target_language": "bm",
+                "text": "x",
+                "glossary": "",
+                "tone": "warm",
+            }
         )
     assert unexpected.value.unexpected == ("tone",)
 
@@ -150,3 +163,26 @@ def test_the_default_variant_prompt_is_seeded_with_the_question_answer_pair(
     assert "new" in lowered and "distinct" in lowered
     assert "do not repeat" in lowered
     assert "style" in lowered and "register" in lowered
+
+
+@pytest.mark.parametrize(
+    "glossary", ['- "paludisme" → "sumaya" (avoid: "malaria")\n- "fièvre" → "farigan"', "(none)"]
+)
+def test_the_default_translation_prompt_carries_the_glossary(glossary: str) -> None:
+    template = PromptTemplate.create(
+        TRANSLATION, DEFAULT_TEMPLATES[TRANSLATION], updated_by=None, at=T0
+    )
+    rendered = template.render(
+        {
+            "source_language": "French",
+            "target_language": "Bambara",
+            "text": "Le paludisme donne de la fièvre.",
+            "glossary": glossary,
+        }
+    )
+    assert "Le paludisme donne de la fièvre." in rendered
+    assert glossary in rendered
+    assert "{" not in rendered and "}" not in rendered
+    lowered = rendered.lower()
+    assert "muso" in lowered and "glossary" in lowered
+    assert "avoid" in lowered

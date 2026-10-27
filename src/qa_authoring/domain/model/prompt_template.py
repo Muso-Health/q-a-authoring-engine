@@ -21,7 +21,9 @@ class PromptTemplateKey(StrEnum):
 
 REQUIRED_PLACEHOLDERS: Mapping[PromptTemplateKey, frozenset[str]] = {
     PromptTemplateKey.COMPLETENESS: frozenset({"documentation", "answers", "language"}),
-    PromptTemplateKey.TRANSLATION: frozenset({"source_language", "target_language", "text"}),
+    PromptTemplateKey.TRANSLATION: frozenset(
+        {"source_language", "target_language", "text", "glossary"}
+    ),
     PromptTemplateKey.VARIANT_GENERATION: frozenset(
         {"answer", "existing_questions", "context", "language"}
     ),
@@ -186,6 +188,29 @@ colloquial.
 - Write natural {language}; do not translate word for word from another language.
 - Return one question per line, with no numbering and no commentary."""
 
+TRANSLATION_DEFAULT = """\
+You are a professional medical translator working for a community health programme in Mali.
+Translate the text below from {source_language} into {target_language}.
+
+Rules:
+- Translate faithfully: keep every clinical fact, instruction, dose, number and warning. Add \
+nothing and omit nothing.
+- Preserve the register and tone of the source: plain, respectful language suited to patients \
+and community health workers.
+- Keep medical terms accurate. When {target_language} has no established term, use the term \
+commonly understood locally and keep the meaning unambiguous.
+- Follow the Muso glossary below: when a listed source term appears in the text, translate it \
+with the {target_language} form given, and never use the alternatives listed to avoid. These \
+preferred translations take precedence over any other wording.
+- Keep names, numbers, units and line breaks as they are.
+- Return only the translation, with no explanation or commentary.
+
+Muso glossary (source term → preferred {target_language} form):
+{glossary}
+
+Text to translate:
+{text}"""
+
 DEFAULT_TEMPLATES: Mapping[PromptTemplateKey, str] = {
     PromptTemplateKey.COMPLETENESS: """\
 You review a clinically validated question-and-answer corpus for a community health programme \
@@ -206,21 +231,6 @@ Answers already in the corpus:
 {answers}
 
 List each uncovered notion as one short phrase in {language}.""",
-    PromptTemplateKey.TRANSLATION: """\
-You are a professional medical translator working for a community health programme in Mali.
-Translate the text below from {source_language} into {target_language}.
-
-Rules:
-- Translate faithfully: keep every clinical fact, instruction, dose, number and warning. Add \
-nothing and omit nothing.
-- Preserve the register and tone of the source: plain, respectful language suited to patients \
-and community health workers.
-- Keep medical terms accurate. When {target_language} has no established term, use the term \
-commonly understood locally and keep the meaning unambiguous.
-- Keep names, numbers, units and line breaks as they are.
-- Return only the translation, with no explanation or commentary.
-
-Text to translate:
-{text}""",
+    PromptTemplateKey.TRANSLATION: TRANSLATION_DEFAULT,
     PromptTemplateKey.VARIANT_GENERATION: VARIANT_GENERATION_DEFAULT,
 }

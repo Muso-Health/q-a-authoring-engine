@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 T1 = datetime(2026, 10, 25, 8, 30, tzinfo=UTC)
-TRANSLATION = "Translate {text} from {source_language} into {target_language}."
+TRANSLATION = "Translate {text} from {source_language} into {target_language}. {glossary}"
 
 
 def _container(engine: AsyncEngine) -> Container:

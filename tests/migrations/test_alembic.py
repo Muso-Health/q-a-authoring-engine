@@ -64,7 +64,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0018_glossary",)]
+    assert versions == [("0019_translation_glossary",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -578,5 +578,58 @@ def test_stored_variant_prompts_gain_the_existing_questions_placeholder(
         assert stored() == after
         PromptTemplate.create(key, stored(), updated_by=None, at=datetime.now(UTC))
         command.downgrade(_alembic_config(), "0015_scoped_role_assignments")
+        assert stored() == before
+    command.downgrade(_alembic_config(), "base")
+
+
+def test_stored_translation_prompts_gain_the_glossary_placeholder(
+    postgres_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """0019: the previous default becomes the new one; an edited template gets the glossary
+    section appended, so it keeps its wording and still validates. The downgrade restores both."""
+    schema = "qa_authoring_it_glossary_prompt"
+    monkeypatch.setenv("QA_AUTHORING_DATABASE_URL", postgres_url)
+    monkeypatch.setenv("QA_AUTHORING_DB_SCHEMA", schema)
+    monkeypatch.delenv("QA_AUTHORING_DB_INSTANCE_CONNECTION_NAME", raising=False)
+    spec = importlib.util.spec_from_file_location(
+        "rev0019", ROOT / "migrations" / "versions" / "0019_translation_glossary.py"
+    )
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+
+    async def store(content: str) -> None:
+        engine = create_async_engine(postgres_url)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(text(f"DELETE FROM {schema}.prompt_templates"))
+                await connection.execute(
+                    text(
+                        f"INSERT INTO {schema}.prompt_templates (key, content, updated_at) "
+                        "VALUES ('translation', :content, now())"
+                    ),
+                    {"content": content},
+                )
+        finally:
+            await engine.dispose()
+
+    def stored() -> str:
+        [(content,)] = asyncio.run(
+            _query(postgres_url, f"SELECT content FROM {schema}.prompt_templates")
+        )
+        return str(content)
+
+    key = PromptTemplateKey.TRANSLATION
+    edited = "Traduire de {source_language} vers {target_language} :\n{text}"
+    for before, after in (
+        (revision._OLD_DEFAULT, DEFAULT_TEMPLATES[key]),
+        (edited, edited + revision._SUFFIX),
+    ):
+        command.upgrade(_alembic_config(), "0018_glossary")
+        asyncio.run(store(before))
+        command.upgrade(_alembic_config(), "head")
+        assert stored() == after
+        PromptTemplate.create(key, stored(), updated_by=None, at=datetime.now(UTC))
+        command.downgrade(_alembic_config(), "0018_glossary")
         assert stored() == before
     command.downgrade(_alembic_config(), "base")

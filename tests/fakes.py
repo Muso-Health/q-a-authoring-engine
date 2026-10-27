@@ -27,6 +27,7 @@ from qa_authoring.application.user_errors import EmailAlreadyExistsError
 from qa_authoring.application.validation_queues import QueuePage
 from qa_authoring.application.validation_reset import ValidationResetter
 from qa_authoring.application.validation_support import BaseLanguageResolver
+from qa_authoring.domain.model.glossary import GlossaryStatus
 from qa_authoring.domain.model.intent import normalize_intent_text
 from qa_authoring.domain.model.permission import Permission
 from qa_authoring.domain.model.role import Role
@@ -66,7 +67,8 @@ if TYPE_CHECKING:
     )
     from qa_authoring.domain.model.category import Category
     from qa_authoring.domain.model.documentation import Documentation
-    from qa_authoring.domain.model.glossary import GlossaryStatus, GlossaryTerm
+    from qa_authoring.domain.model.glossary import GlossaryTerm
+    from qa_authoring.domain.model.glossary_guidance import GlossaryGuidance
     from qa_authoring.domain.model.intent import Intent
     from qa_authoring.domain.model.language import Language
     from qa_authoring.domain.model.project import Project
@@ -309,6 +311,17 @@ class InMemoryGlossaryRepository:
 
     async def save(self, term: GlossaryTerm) -> None:
         self.rows[term.id] = deepcopy(term)
+
+    async def active_with_forms_in(
+        self, source_language_id: UUID, target_language_id: UUID
+    ) -> tuple[GlossaryTerm, ...]:
+        return tuple(
+            deepcopy(row)
+            for row in self.rows.values()
+            if row.status is GlossaryStatus.ACTIVE
+            and row.form(source_language_id) is not None
+            and row.form(target_language_id) is not None
+        )
 
     async def list(
         self, *, status: GlossaryStatus | None, search: str | None, limit: int, offset: int
@@ -559,7 +572,13 @@ class FakeGoogleTranslator:
         self.unsupported: set[str] = set()
         self.failing = False
 
-    async def translate(self, text: str, source: Language, target: Language) -> str:
+    async def translate(
+        self,
+        text: str,
+        source: Language,
+        target: Language,
+        glossary: tuple[GlossaryGuidance, ...] = (),
+    ) -> str:
         for language in (source, target):
             if language.code.value in self.unsupported:
                 raise UnsupportedLanguageForEngineError("google", language.code.value)

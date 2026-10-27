@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from tests.fakes import InMemoryStore
 
-TRANSLATION = "Translate {text} from {source_language} into {target_language}."
+TRANSLATION = "Translate {text} from {source_language} into {target_language}. {glossary}"
 
 
 @pytest.fixture
@@ -56,7 +56,7 @@ def test_list_and_get_the_seeded_defaults(setup: tuple[TestClient, InMemoryStore
     assert translation == {
         "key": "translation",
         "content": DEFAULT_TEMPLATES[PromptTemplateKey.TRANSLATION],
-        "required_placeholders": ["source_language", "target_language", "text"],
+        "required_placeholders": ["glossary", "source_language", "target_language", "text"],
         "updated_by": None,
         "updated_at": "2026-10-24T12:00:00Z",
     }
@@ -86,7 +86,7 @@ def test_invalid_templates_are_422_with_the_placeholders(
         "invalid_prompt_template",
     )
     assert body["details"] == {
-        "missing": ["source_language", "target_language"],
+        "missing": ["glossary", "source_language", "target_language"],
         "unknown": ["tone"],
     }
     _error(

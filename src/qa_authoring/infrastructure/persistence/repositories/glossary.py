@@ -75,6 +75,31 @@ class PostgresGlossaryRepository:
         )
         await self._insert_forms(term)
 
+    async def active_with_forms_in(
+        self, source_language_id: UUID, target_language_id: UUID
+    ) -> tuple[GlossaryTerm, ...]:
+        def has_form(language_id: UUID) -> Any:
+            return (
+                select(glossary_forms.c.id)
+                .where(
+                    glossary_forms.c.term_id == glossary_terms.c.id,
+                    glossary_forms.c.language_id == language_id,
+                )
+                .exists()
+            )
+
+        query = (
+            select(glossary_terms)
+            .where(
+                glossary_terms.c.status == GlossaryStatus.ACTIVE.value,
+                has_form(source_language_id),
+                has_form(target_language_id),
+            )
+            .order_by(glossary_terms.c.id)
+        )
+        rows = (await self._connection.execute(query)).all()
+        return await self._with_forms(rows)
+
     async def list(
         self, *, status: GlossaryStatus | None, search: str | None, limit: int, offset: int
     ) -> tuple[tuple[GlossaryTerm, ...], int]:
