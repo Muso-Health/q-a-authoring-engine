@@ -20,3 +20,19 @@ class UnknownLanguageError(Exception):
         subject = "a language" if language_id is None else f"language {language_id}"
         super().__init__(f"{subject} is not registered")
         self.language_id = language_id
+
+
+class InvalidQAPairsError(ValueError):
+    """Raised when pairs have an empty question or answer; ``rows`` are their indices."""
+
+    def __init__(self, rows: tuple[int, ...]) -> None:
+        super().__init__(f"pairs need a question and an answer (rows {', '.join(map(str, rows))})")
+        self.rows = rows
+
+
+class AnswerAlreadyExistsError(Exception):
+    """Raised when creating a QA set whose base-language answer the theme already has."""
+
+    def __init__(self, qaset_id: UUID) -> None:
+        super().__init__(f"the theme already has this answer, in QA set {qaset_id}")
+        self.qaset_id = qaset_id

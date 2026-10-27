@@ -15,6 +15,10 @@ class ThemeRepository(Protocol):
 
     async def get(self, theme_id: UUID) -> Theme | None: ...
 
+    async def get_for_update(self, theme_id: UUID) -> Theme | None:
+        """Like ``get``, and locks the theme until the transaction ends."""
+        ...
+
     async def list_by_protocol(self, protocol_id: UUID) -> tuple[Theme, ...]:
         """The protocol's themes, ordered by name."""
         ...

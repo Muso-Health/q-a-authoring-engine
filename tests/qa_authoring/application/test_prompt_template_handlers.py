@@ -79,7 +79,7 @@ async def test_list_and_get(world: tuple[Container, InMemoryStore]) -> None:
 
     assert [t.key for t in listed] == ["completeness", "translation", "variant_generation"]
     assert got.key == "variant_generation"
-    assert got.required_placeholders == ("answer", "context", "language")
+    assert got.required_placeholders == ("answer", "context", "existing_questions", "language")
     assert (got.updated_by_email, got.updated_at) == (None, NOW)
 
 

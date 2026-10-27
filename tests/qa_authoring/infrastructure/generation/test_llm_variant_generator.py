@@ -22,7 +22,10 @@ FRENCH = Language.register(LanguageCode("fr"), "French")
 
 class FakePrompts:
     def __init__(
-        self, template: str = "ANSWER={answer} CONTEXT={context} LANGUAGE={language}"
+        self,
+        template: str = (
+            "ANSWER={answer} QUESTIONS={existing_questions} CONTEXT={context} LANGUAGE={language}"
+        ),
     ) -> None:
         self.template = template
         self.calls: list[tuple[PromptTemplateKey, dict[str, str]]] = []
@@ -44,25 +47,36 @@ async def test_renders_the_template_and_appends_the_fixed_directive() -> None:
     prompts = FakePrompts()
     generator, llm = _generator('["Que faire ?"]', prompts)
 
-    await generator.generate("Buvez de l'eau.", " Fièvre chez l'enfant ", FRENCH)
+    await generator.generate(
+        "Buvez de l'eau.", ("Que faire ?", "Comment soigner ?"), " Fièvre chez l'enfant ", FRENCH
+    )
 
     assert prompts.calls == [
         (
             PromptTemplateKey.VARIANT_GENERATION,
-            {"answer": "Buvez de l'eau.", "context": "Fièvre chez l'enfant", "language": "French"},
+            {
+                "answer": "Buvez de l'eau.",
+                "existing_questions": "- Que faire ?\n- Comment soigner ?",
+                "context": "Fièvre chez l'enfant",
+                "language": "French",
+            },
         )
     ]
     [prompt] = llm.prompts
-    assert prompt.startswith("ANSWER=Buvez de l'eau. CONTEXT=Fièvre chez l'enfant LANGUAGE=French")
+    assert prompt.startswith(
+        "ANSWER=Buvez de l'eau. QUESTIONS=- Que faire ?\n- Comment soigner ? "
+        "CONTEXT=Fièvre chez l'enfant LANGUAGE=French"
+    )
     assert prompt.endswith(OUTPUT_DIRECTIVE)
     assert "JSON array of strings" in OUTPUT_DIRECTIVE
 
 
-async def test_an_empty_context_is_marked_as_none() -> None:
+async def test_an_empty_context_or_no_existing_question_is_marked_as_none() -> None:
     prompts = FakePrompts()
     generator, _ = _generator('["q"]', prompts)
-    await generator.generate("a", "   ", FRENCH)
-    assert prompts.calls[0][1]["context"] == "(none)"
+    await generator.generate("a", (), "   ", FRENCH)
+    values = prompts.calls[0][1]
+    assert (values["context"], values["existing_questions"]) == ("(none)", "(none)")
 
 
 @pytest.mark.parametrize(
@@ -85,7 +99,7 @@ async def test_an_empty_context_is_marked_as_none() -> None:
 )
 async def test_parses_trims_and_deduplicates(reply: str, expected: tuple[str, ...]) -> None:
     generator, _ = _generator(reply)
-    assert await generator.generate("a", "", FRENCH) == expected
+    assert await generator.generate("a", (), "", FRENCH) == expected
 
 
 @pytest.mark.parametrize(
@@ -102,19 +116,21 @@ async def test_parses_trims_and_deduplicates(reply: str, expected: tuple[str, ..
 async def test_unusable_output_is_an_engine_error(reply: str) -> None:
     generator, _ = _generator(reply)
     with pytest.raises(GenerationEngineError):
-        await generator.generate("a", "", FRENCH)
+        await generator.generate("a", (), "", FRENCH)
 
 
 async def test_model_failures_are_engine_errors() -> None:
     generator, llm = _generator('["q"]')
     llm.failing = True
     with pytest.raises(GenerationEngineError):
-        await generator.generate("a", "", FRENCH)
+        await generator.generate("a", (), "", FRENCH)
 
 
 async def test_editing_the_template_does_not_change_the_contract() -> None:
-    edited = FakePrompts("Write in {language}. Make them short.\n{context}\n---\n{answer}")
+    edited = FakePrompts(
+        "Write in {language}. Make them short.\n{context}\n---\n{answer}\n{existing_questions}"
+    )
     generator, llm = _generator('["Que faire ?"]', edited)
 
-    assert await generator.generate("Buvez.", "", FRENCH) == ("Que faire ?",)
+    assert await generator.generate("Buvez.", (), "", FRENCH) == ("Que faire ?",)
     assert llm.prompts[0].endswith(OUTPUT_DIRECTIVE)

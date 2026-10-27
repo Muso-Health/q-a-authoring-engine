@@ -296,8 +296,11 @@ class PostgresQASetRepository:
             {"id": c.id, "qaset_id": qaset_id, "language_id": c.language_id, "text": c.text}
             for c in children
         ]
+        # Variants one by one, so their clock_timestamp() created_at follows insertion order.
+        batches = [[row] for row in rows] if table is question_variants else [rows]
         try:
-            await self._connection.execute(insert(table), rows)
+            for batch in batches:
+                await self._connection.execute(insert(table), batch)
         except IntegrityError as exc:
             if sqlstate(exc) == FOREIGN_KEY_VIOLATION and (constraint_name(exc) or "").endswith(
                 "_language_id_languages"

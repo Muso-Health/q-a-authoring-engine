@@ -22,7 +22,9 @@ class PromptTemplateKey(StrEnum):
 REQUIRED_PLACEHOLDERS: Mapping[PromptTemplateKey, frozenset[str]] = {
     PromptTemplateKey.COMPLETENESS: frozenset({"documentation", "answers", "language"}),
     PromptTemplateKey.TRANSLATION: frozenset({"source_language", "target_language", "text"}),
-    PromptTemplateKey.VARIANT_GENERATION: frozenset({"answer", "context", "language"}),
+    PromptTemplateKey.VARIANT_GENERATION: frozenset(
+        {"answer", "existing_questions", "context", "language"}
+    ),
 }
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -157,6 +159,33 @@ def _aware(at: datetime) -> datetime:
     return at
 
 
+VARIANT_GENERATION_DEFAULT = """\
+You help build a clinically reviewed question-and-answer corpus for a community health \
+programme in Mali.
+Below are an answer and the questions already associated with it (there may be none yet). Write \
+several new, distinct questions in {language} that a patient, a caregiver or a community health \
+worker could ask to obtain this answer.
+
+Context:
+{context}
+
+Answer:
+{answer}
+
+Questions already associated with this answer:
+{existing_questions}
+
+Rules:
+- Every question must be fully answered by the answer above. Do not introduce clinical facts, \
+symptoms or treatments that the answer does not cover.
+- Do not repeat or merely reword any question already associated with the answer, and make each \
+new question distinct from the others.
+- Match the style and register of the existing questions, while varying wording and sentence \
+structure as real people would ask. With no existing question, vary the register from formal to \
+colloquial.
+- Write natural {language}; do not translate word for word from another language.
+- Return one question per line, with no numbering and no commentary."""
+
 DEFAULT_TEMPLATES: Mapping[PromptTemplateKey, str] = {
     PromptTemplateKey.COMPLETENESS: """\
 You review a clinically validated question-and-answer corpus for a community health programme \
@@ -193,23 +222,5 @@ commonly understood locally and keep the meaning unambiguous.
 
 Text to translate:
 {text}""",
-    PromptTemplateKey.VARIANT_GENERATION: """\
-You help build a clinically reviewed question-and-answer corpus for a community health \
-programme in Mali.
-Write plausible questions in {language} that a patient, a caregiver or a community health \
-worker could ask, and that the answer below fully addresses.
-
-Context:
-{context}
-
-Answer:
-{answer}
-
-Rules:
-- Every question must be fully answered by the answer above. Do not introduce clinical facts, \
-symptoms or treatments that the answer does not cover.
-- Paraphrase: vary wording, sentence structure and register, from formal to colloquial, as \
-real people would ask.
-- Write natural {language}; do not translate word for word from another language.
-- Return one question per line, with no numbering and no commentary.""",
+    PromptTemplateKey.VARIANT_GENERATION: VARIANT_GENERATION_DEFAULT,
 }

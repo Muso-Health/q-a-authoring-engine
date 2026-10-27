@@ -60,7 +60,13 @@ question_variants = Table(
         index=True,
     ),
     Column("text", Text, nullable=False),
-    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+    # clock_timestamp, not now(): variants added in one transaction keep their order.
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        server_default=func.clock_timestamp(),
+        nullable=False,
+    ),
     PrimaryKeyConstraint("id"),
     # A variant's language must have an answer in the same QA set; removing it removes them.
     ForeignKeyConstraint(

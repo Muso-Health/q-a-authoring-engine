@@ -49,6 +49,11 @@ class PostgresThemeRepository:
         ).one_or_none()
         return None if row is None else _to_domain(row)
 
+    async def get_for_update(self, theme_id: UUID) -> Theme | None:
+        query = select(themes).where(themes.c.id == theme_id).with_for_update()
+        row = (await self._connection.execute(query)).one_or_none()
+        return None if row is None else _to_domain(row)
+
     async def list_by_protocol(self, protocol_id: UUID) -> tuple[Theme, ...]:
         rows = await self._connection.execute(
             select(themes)

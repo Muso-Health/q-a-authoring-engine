@@ -51,7 +51,9 @@ class World:
         self.url = f"/projects/{self.project}/export"
 
     def qaset(self, decision: str | None) -> dict[str, Any]:
-        body = {"language_id": self.fr, "answer_text": "Buvez de l'eau."}
+        # A theme holds each base-language answer once.
+        answer = f"Buvez de l'eau ({uuid4().hex[:8]})."
+        body = {"language_id": self.fr, "answer_text": answer}
         qaset = _ok(self.client.post(f"/themes/{self.theme}/qasets", json=body))
         base = f"/qasets/{qaset['id']}/languages"
         fr_variant = _ok(self.client.post(f"{base}/{self.fr}/variants", json={"text": "Boire ?"}))

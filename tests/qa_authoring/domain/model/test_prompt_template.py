@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from qa_authoring.domain.model.prompt_template import (
+    DEFAULT_TEMPLATES,
     REQUIRED_PLACEHOLDERS,
     InvalidPromptTemplateError,
     PromptRenderError,
@@ -28,7 +29,9 @@ def test_keys_and_their_required_placeholders() -> None:
     assert {
         PromptTemplateKey.COMPLETENESS: frozenset({"documentation", "answers", "language"}),
         PromptTemplateKey.TRANSLATION: frozenset({"source_language", "target_language", "text"}),
-        PromptTemplateKey.VARIANT_GENERATION: frozenset({"answer", "context", "language"}),
+        PromptTemplateKey.VARIANT_GENERATION: frozenset(
+            {"answer", "existing_questions", "context", "language"}
+        ),
     } == REQUIRED_PLACEHOLDERS
 
 
@@ -120,3 +123,30 @@ def test_render_needs_exactly_the_template_values() -> None:
 def test_updated_at_must_be_aware() -> None:
     with pytest.raises(ValueError, match="timezone"):
         PromptTemplate.create(TRANSLATION, VALID, updated_by=None, at=datetime(2026, 10, 24))
+
+
+@pytest.mark.parametrize("existing", ["- Que faire ?\n- Comment soigner ?", "(none)", ""])
+def test_the_default_variant_prompt_is_seeded_with_the_question_answer_pair(
+    existing: str,
+) -> None:
+    template = PromptTemplate.create(
+        PromptTemplateKey.VARIANT_GENERATION,
+        DEFAULT_TEMPLATES[PromptTemplateKey.VARIANT_GENERATION],
+        updated_by=None,
+        at=T0,
+    )
+    rendered = template.render(
+        {
+            "answer": "Buvez de l'eau.",
+            "existing_questions": existing,
+            "context": "Fièvre",
+            "language": "French",
+        }
+    )
+    assert "Buvez de l'eau." in rendered
+    assert existing in rendered
+    assert "{" not in rendered and "}" not in rendered
+    lowered = rendered.lower()
+    assert "new" in lowered and "distinct" in lowered
+    assert "do not repeat" in lowered
+    assert "style" in lowered and "register" in lowered

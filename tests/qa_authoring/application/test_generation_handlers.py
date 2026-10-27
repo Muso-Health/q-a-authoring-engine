@@ -22,6 +22,7 @@ class World:
             self.store.languages.rows[language.id] = language
         qaset = QASet.create(theme_id=uuid4(), language_id=self.fr.id, answer_text="Buvez.")
         qaset.add_language(self.bm.id, "Ji min.")
+        qaset.add_variant(self.fr.id, "Que boire ?")
         self.store.qasets.rows[qaset.id] = qaset
         self.qaset = qaset
         self.generator = FakeVariantGenerator()
@@ -41,7 +42,29 @@ async def test_generates_in_the_answers_language(world: World) -> None:
     result = await world.handler(GenerateVariantsQuery(world.qaset.id, answer.id, "fever"))
 
     assert result.candidates == ("Ji min. (Bambara) #1", "Ji min. (Bambara) #2")
-    assert world.generator.calls == [("Ji min.", "fever", "bm")]
+    assert world.generator.calls == [("Ji min.", (), "fever", "bm")]
+
+
+async def test_is_seeded_with_the_answer_existing_questions(world: World) -> None:
+    world.qaset.add_variant(world.fr.id, "Et pour un enfant ?")
+    world.qaset.add_variant(world.bm.id, "Mun bɛ min ?")
+    world.store.qasets.rows[world.qaset.id] = world.qaset
+    answer = world.qaset.presence(world.fr.id).answer
+
+    await world.handler(GenerateVariantsQuery(world.qaset.id, answer.id, ""))
+
+    [(_, existing, _, language)] = world.generator.calls
+    assert language == "fr"
+    assert sorted(existing) == ["Et pour un enfant ?", "Que boire ?"]
+
+
+async def test_candidates_repeating_an_existing_question_are_dropped(world: World) -> None:
+    answer = world.qaset.presence(world.fr.id).answer
+    world.generator.replies = ("  Que boire ?  ", "Que faut-il boire ?", "que boire ?")
+
+    result = await world.handler(GenerateVariantsQuery(world.qaset.id, answer.id, ""))
+
+    assert result.candidates == ("Que faut-il boire ?", "que boire ?")
 
 
 async def test_unknown_subjects(world: World) -> None:

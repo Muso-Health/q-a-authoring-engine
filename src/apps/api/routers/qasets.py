@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID  # noqa: TC003 — FastAPI resolves path parameter annotations at runtime
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Body, Depends, Response, status
 
 from apps.api.auth import CurrentUser, requires, visible
 from apps.api.dependencies import get_container
@@ -12,9 +12,11 @@ from apps.api.schemas.qasets import (
     AnswerInLanguageRequest,
     AnswerLinkResponse,
     AttachIntentRequest,
+    AuthoredPairsResponse,
     LanguagePresenceResponse,
     LinkAnswersRequest,
     LinkVariantsRequest,
+    QAPairRequest,
     QASetResponse,
     QASetsResponse,
     QuestionVariantResponse,
@@ -26,6 +28,11 @@ from qa_authoring.application.add_category.command import AddCategoryCommand
 from qa_authoring.application.add_language_presence.command import AddLanguagePresenceCommand
 from qa_authoring.application.add_question_variant.command import AddQuestionVariantCommand
 from qa_authoring.application.attach_intent.command import AttachIntentCommand
+from qa_authoring.application.author_qa_pairs.command import (
+    MAX_QA_PAIRS,
+    AuthorQAPairsCommand,
+    QAPair,
+)
 from qa_authoring.application.create_qaset.command import CreateQASetCommand
 from qa_authoring.application.delete_qaset.command import DeleteQASetCommand
 from qa_authoring.application.delete_question_variant.command import (
@@ -66,11 +73,32 @@ def _no_content() -> Response:
 async def create_qaset(
     theme_id: UUID, body: AnswerInLanguageRequest, container: ContainerDep
 ) -> QASetResponse:
-    """Create a QA set with its first answer. 404 if the theme is unknown, 422 if the language."""
+    """Create a QA set with its first answer. 404 if the theme is unknown, 422 if the language;
+    409 ``answer_already_exists`` (with its ``qaset_id``) if the theme already has this
+    base-language answer."""
     command = CreateQASetCommand(
         theme_id=theme_id, language_id=body.language_id, answer_text=body.answer_text
     )
     return QASetResponse.of(await container.run(container.build_create_qaset, command))
+
+
+@router.post(
+    "/themes/{theme_id}/qa-pairs",
+    dependencies=[requires(Permission.AUTHOR_QASETS, on=ResourceKind.THEME)],
+)
+async def author_qa_pairs(
+    theme_id: UUID,
+    body: Annotated[list[QAPairRequest], Body(max_length=MAX_QA_PAIRS)],
+    container: ContainerDep,
+) -> AuthoredPairsResponse:
+    """Author question-answer pairs in the project's base language. Pairs sharing an answer
+    (trimmed) form one QA set, and an answer the theme already has gains the new questions;
+    repeated questions are skipped. At most ``MAX_QA_PAIRS`` (500) pairs per request. 422
+    ``invalid_qa_pairs`` with the offending row indices if a question or answer is empty (nothing
+    is written)."""
+    pairs = tuple(QAPair(p.question, p.answer) for p in body)
+    command = AuthorQAPairsCommand(theme_id, pairs)
+    return AuthoredPairsResponse.of(await container.run(container.build_author_qa_pairs, command))
 
 
 @router.get("/themes/{theme_id}/qasets", dependencies=[visible(ResourceKind.THEME)])

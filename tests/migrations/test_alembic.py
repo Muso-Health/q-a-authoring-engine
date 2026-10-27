@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,12 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from qa_authoring.domain.model.prompt_template import (
+    DEFAULT_TEMPLATES,
+    PromptTemplate,
+    PromptTemplateKey,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -18,6 +26,7 @@ _CREATED_AT_DEFAULTS = {
     "audios": None,
     "documentation": None,
     "user_role_assignments": "clock_timestamp()",
+    "question_variants": "clock_timestamp()",
 }
 
 
@@ -54,7 +63,7 @@ def test_upgrade_head_creates_the_app_schema_and_stamps_it(
     versions = asyncio.run(
         _query(postgres_url, f"SELECT version_num FROM {SCHEMA}.alembic_version")
     )
-    assert versions == [("0015_scoped_role_assignments",)]
+    assert versions == [("0017_variant_clock_timestamp",)]
     public_version = asyncio.run(
         _query(
             postgres_url,
@@ -471,4 +480,57 @@ def test_existing_role_assignments_become_global_and_come_back(
         _query(postgres_url, f"SELECT user_id::text, role_id::text FROM {schema}.user_roles")
     )
     assert restored == [(user, role)]
+    command.downgrade(_alembic_config(), "base")
+
+
+def test_stored_variant_prompts_gain_the_existing_questions_placeholder(
+    postgres_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """0016: the previous default becomes the new one; an edited template gets the placeholder
+    appended, so it still validates. The downgrade restores both."""
+    schema = "qa_authoring_it_prompts"
+    monkeypatch.setenv("QA_AUTHORING_DATABASE_URL", postgres_url)
+    monkeypatch.setenv("QA_AUTHORING_DB_SCHEMA", schema)
+    monkeypatch.delenv("QA_AUTHORING_DB_INSTANCE_CONNECTION_NAME", raising=False)
+    spec = importlib.util.spec_from_file_location(
+        "rev0016", ROOT / "migrations" / "versions" / "0016_variant_prompt_questions.py"
+    )
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+
+    async def store(content: str) -> None:
+        engine = create_async_engine(postgres_url)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(text(f"DELETE FROM {schema}.prompt_templates"))
+                await connection.execute(
+                    text(
+                        f"INSERT INTO {schema}.prompt_templates (key, content, updated_at) "
+                        "VALUES ('variant_generation', :content, now())"
+                    ),
+                    {"content": content},
+                )
+        finally:
+            await engine.dispose()
+
+    def stored() -> str:
+        [(content,)] = asyncio.run(
+            _query(postgres_url, f"SELECT content FROM {schema}.prompt_templates")
+        )
+        return str(content)
+
+    key = PromptTemplateKey.VARIANT_GENERATION
+    edited = "Write questions in {language}.\n{context}\n{answer}"
+    for before, after in (
+        (revision._OLD_DEFAULT, DEFAULT_TEMPLATES[key]),
+        (edited, edited + revision._SUFFIX),
+    ):
+        command.upgrade(_alembic_config(), "0015_scoped_role_assignments")
+        asyncio.run(store(before))
+        command.upgrade(_alembic_config(), "head")
+        assert stored() == after
+        PromptTemplate.create(key, stored(), updated_by=None, at=datetime.now(UTC))
+        command.downgrade(_alembic_config(), "0015_scoped_role_assignments")
+        assert stored() == before
     command.downgrade(_alembic_config(), "base")

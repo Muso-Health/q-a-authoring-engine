@@ -14,7 +14,10 @@ class GenerationEngineError(Exception):
 
 
 class VariantGeneratorPort(Protocol):
-    async def generate(self, answer: str, context: str, language: Language) -> tuple[str, ...]:
-        """Candidate question variants in ``language`` that ``answer`` fully answers: trimmed,
-        non-empty, without duplicates. Raises ``GenerationEngineError``."""
+    async def generate(
+        self, answer: str, existing_questions: tuple[str, ...], context: str, language: Language
+    ) -> tuple[str, ...]:
+        """New candidate question variants in ``language`` that ``answer`` fully answers, seeded
+        with the questions already associated with it: trimmed, non-empty, without duplicates.
+        Raises ``GenerationEngineError``."""
         ...

@@ -27,7 +27,11 @@ from qa_authoring.application.get_qaset.handler import GetQASetHandler
 from qa_authoring.application.language_errors import LanguageInUseError
 from qa_authoring.application.list_qasets.command import ListQASetsQuery
 from qa_authoring.application.list_qasets.handler import ListQASetsHandler
-from qa_authoring.application.qaset_errors import QASetNotFoundError, UnknownLanguageError
+from qa_authoring.application.qaset_errors import (
+    AnswerAlreadyExistsError,
+    QASetNotFoundError,
+    UnknownLanguageError,
+)
 from qa_authoring.application.remove_language_presence.command import (
     RemoveLanguagePresenceCommand,
 )
@@ -44,6 +48,8 @@ from qa_authoring.application.update_question_variant.handler import (
     UpdateQuestionVariantHandler,
 )
 from qa_authoring.domain.model.language import Language
+from qa_authoring.domain.model.project import Project
+from qa_authoring.domain.model.protocol import Protocol
 from qa_authoring.domain.model.qaset import (
     LanguageAlreadyPresentError,
     LanguageNotPresentError,
@@ -53,7 +59,7 @@ from qa_authoring.domain.model.qaset import (
 from qa_authoring.domain.model.theme import Theme
 from qa_authoring.domain.value_objects.language_code import LanguageCode
 from qa_authoring.domain.value_objects.naming import InvalidTextError
-from tests.fakes import InMemoryStore, resetter, views
+from tests.fakes import InMemoryStore, base_language, resetter, views
 
 ACTOR = uuid4()
 
@@ -69,14 +75,22 @@ async def _language(store: InMemoryStore, code: str) -> UUID:
     return language.id
 
 
-async def _theme(store: InMemoryStore) -> UUID:
-    theme = Theme.create(protocol_id=uuid4(), name="Fever")
+async def _theme(store: InMemoryStore, base_language_id: UUID | None = None) -> UUID:
+    project = Project.create(name="P", base_language_id=base_language_id or uuid4())
+    protocol = Protocol.create(project_id=project.id, name="Pr")
+    theme = Theme.create(protocol_id=protocol.id, name="Fever")
+    await store.projects.add(project)
+    await store.protocols.add(protocol)
     await store.themes.add(theme)
     return theme.id
 
 
+def _create(store: InMemoryStore) -> CreateQASetHandler:
+    return CreateQASetHandler(store.qasets, store.themes, store.languages, base_language(store))
+
+
 async def _qaset(store: InMemoryStore, theme_id: UUID, language_id: UUID) -> UUID:
-    result = await CreateQASetHandler(store.qasets, store.themes, store.languages)(
+    result = await _create(store)(
         CreateQASetCommand(theme_id=theme_id, language_id=language_id, answer_text="Rest.")
     )
     return result.id
@@ -105,7 +119,7 @@ async def _add_variant(
 async def test_create_qaset_with_its_first_answer(store: InMemoryStore) -> None:
     theme_id, fr = await _theme(store), await _language(store, "fr")
 
-    result = await CreateQASetHandler(store.qasets, store.themes, store.languages)(
+    result = await _create(store)(
         CreateQASetCommand(theme_id=theme_id, language_id=fr, answer_text=" Rest. ")
     )
 
@@ -113,6 +127,31 @@ async def test_create_qaset_with_its_first_answer(store: InMemoryStore) -> None:
     [presence] = result.languages
     assert (presence.language_id, presence.answer.text, presence.variant_count) == (fr, "Rest.", 0)
     assert result.id in store.qasets.rows
+
+
+async def test_create_qaset_refuses_an_answer_the_theme_already_has(store: InMemoryStore) -> None:
+    fr, bm = await _language(store, "fr"), await _language(store, "bm")
+    theme_id = await _theme(store, base_language_id=fr)
+    existing = await _qaset(store, theme_id, fr)
+
+    with pytest.raises(AnswerAlreadyExistsError) as raised:
+        await _create(store)(
+            CreateQASetCommand(theme_id=theme_id, language_id=fr, answer_text=" Rest. ")
+        )
+    assert raised.value.qaset_id == existing
+    assert list(store.qasets.rows) == [existing]
+
+    # A different answer, the same answer in another theme or outside the base language: created.
+    other_theme = await _theme(store, base_language_id=fr)
+    for theme, language, answer in (
+        (theme_id, fr, "Drink."),
+        (other_theme, fr, "Rest."),
+        (theme_id, bm, "Rest."),
+    ):
+        await _create(store)(
+            CreateQASetCommand(theme_id=theme, language_id=language, answer_text=answer)
+        )
+    assert len(store.qasets.rows) == 4
 
 
 async def test_create_qaset_under_a_missing_theme(store: InMemoryStore) -> None:
@@ -129,7 +168,7 @@ async def test_create_qaset_with_an_unknown_language(store: InMemoryStore) -> No
 
 async def test_create_qaset_with_blank_answer(store: InMemoryStore) -> None:
     with pytest.raises(InvalidTextError):
-        await CreateQASetHandler(store.qasets, store.themes, store.languages)(
+        await _create(store)(
             CreateQASetCommand(
                 theme_id=await _theme(store),
                 language_id=await _language(store, "fr"),
@@ -174,11 +213,50 @@ async def test_add_presence_validates_language_and_qaset(store: InMemoryStore) -
         await _add_language(store, uuid4(), fr)
 
 
+def _update(store: InMemoryStore) -> UpdateAnswerHandler:
+    return UpdateAnswerHandler(
+        store.qasets, store.themes, base_language(store), views(store), resetter(store)
+    )
+
+
+async def _rename(store: InMemoryStore, qaset_id: UUID, language_id: UUID, text: str) -> str:
+    presence = await _update(store)(
+        UpdateAnswerCommand(
+            qaset_id=qaset_id, language_id=language_id, text=text, actor_user_id=ACTOR
+        )
+    )
+    return presence.answer.text
+
+
+async def test_an_answer_cannot_be_renamed_onto_another_sets_answer(store: InMemoryStore) -> None:
+    fr, bm = await _language(store, "fr"), await _language(store, "bm")
+    theme_id = await _theme(store, base_language_id=fr)
+    rest = await _qaset(store, theme_id, fr)
+    drink = (
+        await _create(store)(
+            CreateQASetCommand(theme_id=theme_id, language_id=fr, answer_text="Drink.")
+        )
+    ).id
+
+    with pytest.raises(AnswerAlreadyExistsError) as raised:
+        await _rename(store, drink, fr, " Rest. ")
+    assert raised.value.qaset_id == rest
+    assert store.qasets.rows[drink].presence(fr).answer.text == "Drink."
+
+    assert await _rename(store, drink, fr, " Drink. ") == "Drink."
+    assert await _rename(store, drink, fr, "Sleep.") == "Sleep."
+    # Another theme's answers do not count, nor do answers outside the base language.
+    elsewhere = await _qaset(store, await _theme(store, base_language_id=fr), fr)
+    assert await _rename(store, elsewhere, fr, "Sleep.") == "Sleep."
+    await _add_language(store, drink, bm)
+    assert await _rename(store, drink, bm, "Rest.") == "Rest."
+
+
 async def test_update_answer(store: InMemoryStore) -> None:
     fr = await _language(store, "fr")
     qaset_id = await _qaset(store, await _theme(store), fr)
 
-    presence = await UpdateAnswerHandler(store.qasets, views(store), resetter(store))(
+    presence = await _update(store)(
         UpdateAnswerCommand(
             qaset_id=qaset_id, language_id=fr, text="Drink water.", actor_user_id=ACTOR
         )
@@ -187,7 +265,7 @@ async def test_update_answer(store: InMemoryStore) -> None:
     assert presence.answer.text == "Drink water."
     assert store.qasets.rows[qaset_id].presence(fr).answer.text == "Drink water."
     with pytest.raises(LanguageNotPresentError):
-        await UpdateAnswerHandler(store.qasets, views(store), resetter(store))(
+        await _update(store)(
             UpdateAnswerCommand(
                 qaset_id=qaset_id, language_id=uuid4(), text="x", actor_user_id=ACTOR
             )

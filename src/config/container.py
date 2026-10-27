@@ -13,6 +13,7 @@ from qa_authoring.application.analyze_theme_completeness.handler import (
 from qa_authoring.application.assign_role.handler import AssignRoleHandler
 from qa_authoring.application.attach_intent.handler import AttachIntentHandler
 from qa_authoring.application.audio_upload import AudioUploader
+from qa_authoring.application.author_qa_pairs.handler import AuthorQAPairsHandler
 from qa_authoring.application.bootstrap_admin.handler import BootstrapAdminHandler
 from qa_authoring.application.create_project.handler import CreateProjectHandler
 from qa_authoring.application.create_protocol.handler import CreateProtocolHandler
@@ -303,13 +304,22 @@ class Container:
         return DeleteThemeHandler(uow.themes, uow.qasets)
 
     def build_create_qaset(self, uow: UnitOfWork) -> CreateQASetHandler:
-        return CreateQASetHandler(uow.qasets, uow.themes, uow.languages)
+        return CreateQASetHandler(uow.qasets, uow.themes, uow.languages, self._base_language(uow))
+
+    def build_author_qa_pairs(self, uow: UnitOfWork) -> AuthorQAPairsHandler:
+        return AuthorQAPairsHandler(uow.qasets, uow.themes, self._base_language(uow))
 
     def build_add_language_presence(self, uow: UnitOfWork) -> AddLanguagePresenceHandler:
         return AddLanguagePresenceHandler(uow.qasets, uow.languages)
 
     def build_update_answer(self, uow: UnitOfWork) -> UpdateAnswerHandler:
-        return UpdateAnswerHandler(uow.qasets, self._views(uow), self._resetter(uow))
+        return UpdateAnswerHandler(
+            uow.qasets,
+            uow.themes,
+            self._base_language(uow),
+            self._views(uow),
+            self._resetter(uow),
+        )
 
     def build_remove_language_presence(self, uow: UnitOfWork) -> RemoveLanguagePresenceHandler:
         return RemoveLanguagePresenceHandler(uow.qasets, self._resetter(uow))

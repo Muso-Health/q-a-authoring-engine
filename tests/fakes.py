@@ -160,6 +160,9 @@ class InMemoryThemeRepository:
     async def get(self, theme_id: UUID) -> Theme | None:
         return self.rows.get(theme_id)
 
+    async def get_for_update(self, theme_id: UUID) -> Theme | None:
+        return self.rows.get(theme_id)
+
     async def list_by_protocol(self, protocol_id: UUID) -> tuple[Theme, ...]:
         rows = [row for row in self.rows.values() if row.protocol_id == protocol_id]
         return tuple(sorted(rows, key=lambda row: (row.name, str(row.id))))
@@ -534,13 +537,19 @@ class FakeGoogleTranslator:
 
 
 class FakeVariantGenerator:
-    """Proposes two numbered questions per answer, naming the language it was asked for."""
+    """Proposes two numbered questions per answer, naming the language it was asked for, unless
+    ``replies`` says what to propose."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, str]] = []
+        self.calls: list[tuple[str, tuple[str, ...], str, str]] = []
+        self.replies: tuple[str, ...] | None = None
 
-    async def generate(self, answer: str, context: str, language: Language) -> tuple[str, ...]:
-        self.calls.append((answer, context, language.code.value))
+    async def generate(
+        self, answer: str, existing_questions: tuple[str, ...], context: str, language: Language
+    ) -> tuple[str, ...]:
+        self.calls.append((answer, existing_questions, context, language.code.value))
+        if self.replies is not None:
+            return self.replies
         return tuple(f"{answer} ({language.name}) #{n}" for n in (1, 2))
 
 
@@ -761,6 +770,9 @@ def views(store: InMemoryStore) -> QASetViews:
     return QASetViews(store.intents, store.categories, store.validations)
 
 
+def base_language(store: InMemoryStore) -> BaseLanguageResolver:
+    return BaseLanguageResolver(store.themes, store.protocols, store.projects)
+
+
 def resetter(store: InMemoryStore) -> ValidationResetter:
-    base_language = BaseLanguageResolver(store.themes, store.protocols, store.projects)
-    return ValidationResetter(store.validations, base_language, lambda: NOW)
+    return ValidationResetter(store.validations, base_language(store), lambda: NOW)

@@ -86,6 +86,20 @@ def test_create_qaset(client: TestClient) -> None:
     assert _ok(client.get(f"/qasets/{body['id']}"), 200) == body
 
 
+def test_create_qaset_with_an_answer_the_theme_already_has_is_409(client: TestClient) -> None:
+    theme_id, fr = _theme(client)
+    existing = _qaset(client, theme_id, fr)
+    response = client.post(
+        f"/themes/{theme_id}/qasets", json={"language_id": fr, "answer_text": "Rest."}
+    )
+    _error(response, 409, "answer_already_exists")
+    assert response.json()["details"] == {"qaset_id": existing["id"]}
+    other = client.post(
+        f"/themes/{theme_id}/qasets", json={"language_id": fr, "answer_text": "Drink."}
+    )
+    assert other.status_code == 201, other.text
+
+
 def test_create_qaset_under_missing_theme_is_404(client: TestClient) -> None:
     fr = _language(client, "fr")
     response = client.post(
@@ -221,6 +235,20 @@ def test_absent_language_presence_is_404(client: TestClient, setup: tuple[str, s
         "language_not_present",
     )
     _error(client.delete(f"/qasets/{qaset_id}/languages/{bm}"), 404, "language_not_present")
+
+
+def test_renaming_onto_another_sets_answer_is_409(
+    client: TestClient, setup: tuple[str, str, str]
+) -> None:
+    theme_id, fr, rest = setup
+    body = {"language_id": fr, "answer_text": "Drink."}
+    drink = _ok(client.post(f"/themes/{theme_id}/qasets", json=body))["id"]
+    url = f"/qasets/{drink}/languages/{fr}"
+    response = client.patch(url, json={"text": "Rest."})
+    _error(response, 409, "answer_already_exists")
+    assert response.json()["details"] == {"qaset_id": rest}
+    assert _ok(client.patch(url, json={"text": "Drink."}), 200)["answer"]["text"] == "Drink."
+    assert _ok(client.patch(url, json={"text": "Sleep."}), 200)["answer"]["text"] == "Sleep."
 
 
 def test_update_answer_validation(client: TestClient, setup: tuple[str, str, str]) -> None:

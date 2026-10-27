@@ -11,6 +11,7 @@ from apps.api.schemas.validation import ValidationStateResponse
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from qa_authoring.application.author_qa_pairs.command import AuthoredPairsResult
     from qa_authoring.application.qaset_response import (
         AttachedCategoryResult,
         AttachedIntentResult,
@@ -34,6 +35,29 @@ class AnswerInLanguageRequest(_Strict):
 
     language_id: UUID
     answer_text: str
+
+
+class QAPairRequest(_Strict):
+    """No language: pairs are always authored in the project's base language."""
+
+    question: str
+    answer: str
+
+
+class AuthoredPairsResponse(BaseModel):
+    qasets_created: int
+    qasets_updated: int
+    variants_added: int
+    skipped_rows: list[int]
+
+    @classmethod
+    def of(cls, result: AuthoredPairsResult) -> AuthoredPairsResponse:
+        return cls(
+            qasets_created=result.qasets_created,
+            qasets_updated=result.qasets_updated,
+            variants_added=result.variants_added,
+            skipped_rows=list(result.skipped_rows),
+        )
 
 
 class TextRequest(_Strict):

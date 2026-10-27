@@ -45,7 +45,12 @@ from qa_authoring.application.protocol_errors import (
     ProtocolHasThemesError,
     ProtocolNotFoundError,
 )
-from qa_authoring.application.qaset_errors import QASetNotFoundError, UnknownLanguageError
+from qa_authoring.application.qaset_errors import (
+    AnswerAlreadyExistsError,
+    InvalidQAPairsError,
+    QASetNotFoundError,
+    UnknownLanguageError,
+)
 from qa_authoring.application.role_errors import (
     RoleInUseError,
     RoleNameExistsError,
@@ -99,6 +104,14 @@ class _Rule:
     details: Callable[[Any], dict[str, Any]] | None = None
 
 
+def _answer_exists_details(exc: AnswerAlreadyExistsError) -> dict[str, Any]:
+    return {"qaset_id": str(exc.qaset_id)}
+
+
+def _qa_pairs_details(exc: InvalidQAPairsError) -> dict[str, Any]:
+    return {"rows": list(exc.rows)}
+
+
 def _prompt_template_details(exc: InvalidPromptTemplateError) -> dict[str, Any]:
     # The offending placeholders reach the client so the editor can show what to fix.
     return {"missing": list(exc.missing), "unknown": list(exc.unknown)}
@@ -132,6 +145,8 @@ _RULES: dict[type[Exception], _Rule] = {
     TranslationEngineError: _Rule(502, "translation_engine_error"),
     GenerationEngineError: _Rule(502, "generation_engine_error"),
     InvalidPromptTemplateError: _Rule(422, "invalid_prompt_template", _prompt_template_details),
+    InvalidQAPairsError: _Rule(422, "invalid_qa_pairs", _qa_pairs_details),
+    AnswerAlreadyExistsError: _Rule(409, "answer_already_exists", _answer_exists_details),
     UnknownPermissionError: _Rule(422, "unknown_permission"),
     InvalidEmailError: _Rule(422, "invalid_email"),
     LanguageNotFoundError: _Rule(404, "language_not_found"),

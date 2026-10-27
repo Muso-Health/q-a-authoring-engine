@@ -250,10 +250,14 @@ async def test_tags_and_audio_do_not_reset_text_validations(world: World) -> Non
 
 
 async def test_edits_without_any_validation_need_no_catalog_lookup() -> None:
+    # A variant edit only: editing an answer resolves the base language anyway, to keep each
+    # base-language answer once per theme.
     world = World()  # nothing decided
     world.store.themes.rows.clear()  # resolving the base language would now fail
     await world.run(
-        "build_update_answer",
-        UpdateAnswerCommand(world.qaset_id, FR, "edited", actor_user_id=world.editor),
+        "build_update_question_variant",
+        UpdateQuestionVariantCommand(
+            world.qaset_id, world.variant(FR), "edited", actor_user_id=world.editor
+        ),
     )
     assert world.store.validations.rows == {}

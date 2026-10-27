@@ -13,8 +13,9 @@ if TYPE_CHECKING:
 
 
 class GenerateVariantsHandler:
-    """Propose question variants for an answer, in the answer's language. Proposes only: nothing
-    is saved; the author keeps candidates through the add-variant endpoint."""
+    """Propose new question variants for an answer, in the answer's language, seeded with the
+    question variants it already has; a candidate repeating one of them is dropped. Proposes
+    only: nothing is saved; the author keeps candidates through the add-variant endpoint."""
 
     def __init__(
         self,
@@ -31,5 +32,12 @@ class GenerateVariantsHandler:
         answer = qaset.answer_by_id(query.answer_id)
         language = await self._languages.get(answer.language_id)
         assert language is not None  # an answer's language is held by a RESTRICT foreign key
-        candidates = await self._generator.generate(answer.text, query.context, language)
-        return GeneratedVariantsResult(candidates)
+        existing = tuple(v.text for v in qaset.presence(answer.language_id).variants)
+        candidates = await self._generator.generate(answer.text, existing, query.context, language)
+        return GeneratedVariantsResult(without_existing(candidates, existing))
+
+
+def without_existing(candidates: tuple[str, ...], existing: tuple[str, ...]) -> tuple[str, ...]:
+    """Drops the candidates whose trimmed text is exactly an existing question's."""
+    taken = {text.strip() for text in existing}
+    return tuple(c for c in candidates if c.strip() not in taken)

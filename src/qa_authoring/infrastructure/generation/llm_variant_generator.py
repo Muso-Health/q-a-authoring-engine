@@ -27,10 +27,17 @@ class LlmVariantGenerator:
         self._prompts = prompts
         self._llm = llm
 
-    async def generate(self, answer: str, context: str, language: Language) -> tuple[str, ...]:
+    async def generate(
+        self, answer: str, existing_questions: tuple[str, ...], context: str, language: Language
+    ) -> tuple[str, ...]:
         prompt = await self._prompts.render(
             PromptTemplateKey.VARIANT_GENERATION,
-            {"answer": answer, "context": context.strip() or "(none)", "language": language.name},
+            {
+                "answer": answer,
+                "existing_questions": "\n".join(f"- {q}" for q in existing_questions) or "(none)",
+                "context": context.strip() or "(none)",
+                "language": language.name,
+            },
         )
         try:
             reply = await self._llm.generate(prompt + OUTPUT_DIRECTIVE)
@@ -49,5 +56,7 @@ def parse_candidates(reply: str) -> tuple[str, ...]:
 class UnavailableVariantGenerator:
     """Stands in when no language model is configured."""
 
-    async def generate(self, answer: str, context: str, language: Language) -> tuple[str, ...]:
+    async def generate(
+        self, answer: str, existing_questions: tuple[str, ...], context: str, language: Language
+    ) -> tuple[str, ...]:
         raise GenerationEngineError("is not configured")
